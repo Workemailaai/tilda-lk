@@ -360,6 +360,8 @@
     return data;
   };
 
+  let pendingLegalEntityDraft = null;
+
   const auth = {
     async login({ login, password }) {
       const normalizedLogin = apiPhone(login);
@@ -388,11 +390,13 @@
       return throwRegistrationValidation(data);
     },
 
+    // Регистрирует физлицо или юрлицо после подтверждения телефона.
     async confirmRegister({ login, password, code, name, surname, mail }) {
       if (!/^\d{6}$/.test(String(code || ""))) {
         throw new Error("Код из SMS должен содержать 6 цифр.");
       }
       const phone = apiPhone(login);
+      const legalDraft = pendingLegalEntityDraft;
       const confirmation = await request("POST", "/auth/user/phone/pin/confirm", {
         pin: code,
         login: phone,
@@ -402,12 +406,20 @@
         throw new Error("Телефон не подтверждён.");
       }
 
-      const data = await request("POST", "/auth/user", {
-        login: phone,
-        password,
-        politicAgreements: true,
-        hash: crypto.randomUUID(),
-      }, {}, false);
+      const data = legalDraft
+        ? await request("POST", "/auth/user/legal-entity", {
+          login: phone,
+          password,
+          ...(legalDraft.categories?.length ? { categories: legalDraft.categories } : {}),
+          politicAgreements: true,
+          legalEntity: legalDraft.legalEntity,
+        }, {}, false)
+        : await request("POST", "/auth/user", {
+          login: phone,
+          password,
+          politicAgreements: true,
+          hash: crypto.randomUUID(),
+        }, {}, false);
       throwRegistrationValidation(data);
       saveToken(extractToken(data));
 
@@ -430,6 +442,7 @@
       );
 
       clearDemoMode();
+      pendingLegalEntityDraft = null;
       // Navigation after registration is handled by the auth UI so it can persist
       // the one-time success toast and the post-registration destination first.
       return data;
@@ -1412,6 +1425,7 @@
 
   window.__OPEN_LK_LOGOUT__ = logout;
 
+  // Подключает перехват форм кабинета и регистрацию юрлица.
   const installUiGuards = () => {
     if (window.__OPEN_LK_UI_GUARDS__) return;
     window.__OPEN_LK_UI_GUARDS__ = true;
@@ -1542,6 +1556,369 @@
 
     new MutationObserver(addPasswordField).observe(document.documentElement, { childList: true, subtree: true });
     window.addEventListener("open-lk-real-data", addPasswordField);
+    installLegalEntityRegistration();
+  };
+
+  const LEGAL_ENTITY_SUBTITLE = "Заполните реквизиты организации для регистрации.";
+  const PERSON_REGISTRATION_SUBTITLE = "Реквизиты организации можно заполнить после регистрации.";
+  const legalEntityFormValues = {};
+  let userCategoriesCache = null;
+  let userCategoriesRequest = null;
+  let legalEntitySyncFrame = 0;
+
+  // Загружает каталог категорий для необязательного поля регистрации юрлица.
+  const loadUserCategories = () => {
+    if (userCategoriesCache) return Promise.resolve(userCategoriesCache);
+    if (!userCategoriesRequest) {
+      userCategoriesRequest = request("GET", "/auth/user/categories", undefined, {}, false)
+        .then((data) => {
+          const categories = Array.isArray(data) ? data : [];
+          userCategoriesCache = categories
+            .map((category) => ({
+              id: String(category?.id || "").trim(),
+              categoryName: String(category?.categoryName || "").trim(),
+            }))
+            .filter((category) => category.id && category.categoryName);
+          return userCategoriesCache;
+        })
+        .catch(() => {
+          userCategoriesCache = [];
+          return userCategoriesCache;
+        });
+    }
+    return userCategoriesRequest;
+  };
+
+  // Проверяет, что на шаге регистрации выбрано юридическое лицо.
+  const isCompanyRegistrationForm = (form) => {
+    const selectedRole = form.querySelector(".role-choice button.selected");
+    return Boolean(selectedRole && selectedRole.textContent.trim() === "Юридическое лицо");
+  };
+
+  // Читает значение поля регистрации по тексту его подписи.
+  const readLabeledInput = (form, label) => {
+    const labels = form.querySelectorAll("label.field");
+    for (const field of labels) {
+      if (field.closest("[data-open-lk-legal-entity]")) continue;
+      const caption = field.querySelector("span");
+      const text = String(caption?.childNodes?.[0]?.textContent || "").trim();
+      if (text !== label) continue;
+      const input = field.querySelector("input");
+      return input ? String(input.value || "") : "";
+    }
+    return "";
+  };
+
+  // Читает реквизит из блока юрлица.
+  const readLegalInput = (form, name) => {
+    const input = form.querySelector(`[data-legal-field="${name}"]`);
+    if (input) return String(input.value || "");
+    return String(legalEntityFormValues[name] || "");
+  };
+
+  // Собирает тело legalEntity из полей, которые реально есть в контракте.
+  const collectLegalEntityDraft = (form) => {
+    const legalEntity = {
+      legalName: readLegalInput(form, "legalName").trim(),
+      email: readLabeledInput(form, "Электронная почта").trim(),
+      inn: readLegalInput(form, "inn").trim(),
+      kpp: readLegalInput(form, "kpp").trim(),
+      ogrn: readLegalInput(form, "ogrn").trim(),
+      legalAddress: readLegalInput(form, "legalAddress").trim(),
+      settlementAccount: readLegalInput(form, "settlementAccount").trim(),
+      bik: readLegalInput(form, "bik").trim(),
+      bankName: readLegalInput(form, "bankName").trim(),
+    };
+    const phone = apiPhone(readLabeledInput(form, "Телефон"));
+    if (/^\+?[0-9]{10,15}$/.test(phone)) legalEntity.phone = phone;
+    const contactPerson = [
+      readLabeledInput(form, "Фамилия"),
+      readLabeledInput(form, "Имя"),
+    ].map((part) => part.trim()).filter(Boolean).join(" ");
+    if (contactPerson) legalEntity.contactPerson = contactPerson;
+    const correspondentAccount = readLegalInput(form, "correspondentAccount").trim();
+    if (correspondentAccount) legalEntity.correspondentAccount = correspondentAccount;
+
+    const selectedCategoryId = readLegalInput(form, "categoryId").trim();
+    const selectedCategory = (userCategoriesCache || []).find((item) => item.id === selectedCategoryId);
+    const categories = selectedCategory
+      ? [{ id: selectedCategory.id, categoryName: selectedCategory.categoryName }]
+      : [];
+    return { legalEntity, categories };
+  };
+
+  // Проверяет обязательные реквизиты юрлица до отправки SMS-кода.
+  const validateLegalEntityDraft = (draft) => {
+    const entity = draft.legalEntity;
+    const checks = [
+      ["legalName", "Укажите юридическое название.", (value) => value.trim().length > 0],
+      ["inn", "ИНН должен содержать 10 цифр.", (value) => /^\d{10}$/.test(value)],
+      ["kpp", "КПП должен содержать 9 цифр.", (value) => /^\d{9}$/.test(value)],
+      ["ogrn", "ОГРН должен содержать 13 цифр.", (value) => /^\d{13}$/.test(value)],
+      ["legalAddress", "Укажите юридический адрес.", (value) => value.trim().length > 0],
+      ["settlementAccount", "Расчётный счёт должен содержать 20 цифр.", (value) => /^\d{20}$/.test(value)],
+      ["bik", "БИК должен содержать 9 цифр.", (value) => /^\d{9}$/.test(value)],
+      ["bankName", "Укажите банк.", (value) => value.trim().length > 0],
+    ];
+    for (const [field, message, test] of checks) {
+      if (!test(String(entity[field] || ""))) return { field, message };
+    }
+    if (entity.correspondentAccount && !/^\d{20}$/.test(entity.correspondentAccount)) {
+      return {
+        field: "correspondentAccount",
+        message: "Корреспондентский счёт должен содержать 20 цифр.",
+      };
+    }
+    return null;
+  };
+
+  // Сохраняет введённые реквизиты, чтобы перерисовка React их не стирала.
+  const captureLegalEntityFieldValues = (root) => {
+    root.querySelectorAll("[data-legal-field]").forEach((input) => {
+      legalEntityFormValues[input.dataset.legalField] = input.value;
+    });
+  };
+
+  // Возвращает сохранённые реквизиты в заново вставленный блок.
+  const restoreLegalEntityFieldValues = (root) => {
+    root.querySelectorAll("[data-legal-field]").forEach((input) => {
+      const savedValue = legalEntityFormValues[input.dataset.legalField];
+      if (savedValue !== undefined) input.value = savedValue;
+    });
+  };
+
+  // Собирает разметку реквизитов юрлица.
+  const renderLegalEntityInput = ({ name, label, maxLength, digits, required }) => {
+    const requiredMark = required ? `<span class="required"> *</span>` : "";
+    const digitsAttr = digits ? ` data-legal-digits="1" inputmode="numeric"` : "";
+    return `<label class="field"><span>${label}${requiredMark}</span><input type="text" data-legal-field="${name}" maxlength="${maxLength}" autocomplete="off"${digitsAttr}></label>`;
+  };
+
+  // Собирает блок реквизитов регистрации юрлица.
+  const buildLegalEntityFieldsMarkup = () => {
+    const legalName = renderLegalEntityInput({
+      name: "legalName",
+      label: "Юридическое название",
+      maxLength: 255,
+      required: true,
+    });
+    const inn = renderLegalEntityInput({ name: "inn", label: "ИНН", maxLength: 10, digits: true, required: true });
+    const kpp = renderLegalEntityInput({ name: "kpp", label: "КПП", maxLength: 9, digits: true, required: true });
+    const ogrn = renderLegalEntityInput({ name: "ogrn", label: "ОГРН", maxLength: 13, digits: true, required: true });
+    const legalAddress = renderLegalEntityInput({
+      name: "legalAddress",
+      label: "Юридический адрес",
+      maxLength: 1000,
+      required: true,
+    });
+    const bankName = renderLegalEntityInput({
+      name: "bankName",
+      label: "Банк",
+      maxLength: 255,
+      required: true,
+    });
+    const settlementAccount = renderLegalEntityInput({
+      name: "settlementAccount",
+      label: "Расчётный счёт",
+      maxLength: 20,
+      digits: true,
+      required: true,
+    });
+    const bik = renderLegalEntityInput({ name: "bik", label: "БИК", maxLength: 9, digits: true, required: true });
+    const correspondentAccount = renderLegalEntityInput({
+      name: "correspondentAccount",
+      label: "Корреспондентский счёт",
+      maxLength: 20,
+      digits: true,
+      required: false,
+    });
+    return `<p class="muted form-section">Реквизиты организации</p>
+${legalName}
+<div class="form-grid">${inn}${kpp}</div>
+${ogrn}
+${legalAddress}
+<p class="muted form-section">Банковские реквизиты</p>
+${bankName}
+<div class="form-grid">${settlementAccount}${bik}</div>
+${correspondentAccount}
+<label class="field" data-legal-category hidden><span>Категория</span><select data-legal-field="categoryId"></select></label>
+<p class="error" data-legal-error hidden></p>`;
+  };
+
+  // Заполняет список категорий ответом GET /auth/user/categories.
+  const fillLegalEntityCategorySelect = (block) => {
+    const label = block.querySelector("[data-legal-category]");
+    const select = block.querySelector("[data-legal-field='categoryId']");
+    if (!label || !select) return;
+    if (!userCategoriesCache) {
+      label.hidden = true;
+      loadUserCategories().then(() => {
+        if (label.isConnected) fillLegalEntityCategorySelect(block);
+      });
+      return;
+    }
+    if (!userCategoriesCache.length) {
+      label.hidden = true;
+      return;
+    }
+    label.hidden = false;
+      const selectedCategoryId = String(legalEntityFormValues.categoryId || "");
+    select.replaceChildren();
+    const emptyOption = document.createElement("option");
+    emptyOption.value = "";
+    emptyOption.textContent = "Не выбрана";
+    select.append(emptyOption);
+    userCategoriesCache.forEach((category) => {
+      const option = document.createElement("option");
+      option.value = category.id;
+      option.textContent = category.categoryName;
+      select.append(option);
+    });
+    if (selectedCategoryId && userCategoriesCache.some((category) => category.id === selectedCategoryId)) {
+      select.value = selectedCategoryId;
+    }
+  };
+
+  // Показывает ошибку реквизитов и отмечает неверное поле.
+  const showLegalEntityError = (form, fieldName, message) => {
+    const block = form.querySelector("[data-open-lk-legal-entity]");
+    const errorNode = block?.querySelector("[data-legal-error]");
+    if (errorNode) {
+      errorNode.hidden = false;
+      errorNode.textContent = message;
+    }
+    const input = form.querySelector(`[data-legal-field="${fieldName}"]`);
+    if (!input) return;
+    input.setAttribute("aria-invalid", "true");
+    input.focus();
+  };
+
+  // Запоминает ввод в реквизитах и снимает подсветку ошибки.
+  const bindLegalEntityFields = (block) => {
+    block.querySelectorAll("[data-legal-field]").forEach((input) => {
+      // Сохраняет значение реквизита и убирает ошибку поля.
+      const rememberLegalFieldValue = () => {
+        if (input.dataset.legalDigits === "1") {
+          const limit = Number(input.getAttribute("maxlength")) || 0;
+          let digits = String(input.value || "").replace(/\D/g, "");
+          if (limit) digits = digits.slice(0, limit);
+          if (digits !== input.value) input.value = digits;
+        }
+        legalEntityFormValues[input.dataset.legalField] = input.value;
+        input.removeAttribute("aria-invalid");
+        const errorNode = block.querySelector("[data-legal-error]");
+        if (errorNode) {
+          errorNode.hidden = true;
+          errorNode.textContent = "";
+        }
+      };
+      input.addEventListener("input", rememberLegalFieldValue);
+      input.addEventListener("change", rememberLegalFieldValue);
+    });
+  };
+
+  // Вставляет блок реквизитов в форму регистрации юрлица.
+  const ensureLegalEntityFields = (form) => {
+    const current = form.querySelector("[data-open-lk-legal-entity]");
+    if (current) return current;
+    const block = document.createElement("div");
+    block.setAttribute("data-open-lk-legal-entity", "");
+    block.innerHTML = buildLegalEntityFieldsMarkup();
+    const grid = form.querySelector(".form-grid");
+    form.insertBefore(block, grid ? grid.nextSibling : null);
+    bindLegalEntityFields(block);
+    restoreLegalEntityFieldValues(block);
+    fillLegalEntityCategorySelect(block);
+    return block;
+  };
+
+  // Меняет подпись регистрации, пока выбрано юридическое лицо.
+  const syncRegistrationSubtitle = (isCompany) => {
+    const subtitle = document.querySelector(".auth-inner > p.muted");
+    if (!subtitle) return;
+    const text = subtitle.textContent.trim();
+    if (isCompany && text === PERSON_REGISTRATION_SUBTITLE) {
+      subtitle.textContent = LEGAL_ENTITY_SUBTITLE;
+      return;
+    }
+    if (!isCompany && text === LEGAL_ENTITY_SUBTITLE) {
+      subtitle.textContent = PERSON_REGISTRATION_SUBTITLE;
+    }
+  };
+
+  // Синхронизирует блок реквизитов с выбранным типом регистрации.
+  const syncLegalEntityRegistrationForm = () => {
+    const form = document.querySelector(".auth-form form");
+    if (!(form instanceof HTMLFormElement)) {
+      pendingLegalEntityDraft = null;
+      return;
+    }
+    const isCompany = isCompanyRegistrationForm(form);
+    syncRegistrationSubtitle(isCompany);
+    if (isCompany) {
+      ensureLegalEntityFields(form);
+      return;
+    }
+    const block = form.querySelector("[data-open-lk-legal-entity]");
+    if (block) {
+      captureLegalEntityFieldValues(block);
+      block.remove();
+    }
+    const selectedRole = form.querySelector(".role-choice button.selected");
+    if (selectedRole && selectedRole.textContent.trim() === "Физическое лицо") {
+      pendingLegalEntityDraft = null;
+      return;
+    }
+    const heading = document.querySelector(".auth-inner h2");
+    const isSmsStep = Boolean(heading && heading.textContent.trim() === "Введите код из SMS");
+    if (!isSmsStep) pendingLegalEntityDraft = null;
+  };
+
+  // Подключает форму юрлица и откладывает черновик до подтверждения телефона.
+  const installLegalEntityRegistration = () => {
+    if (window.__OPEN_LK_LEGAL_ENTITY__) return;
+    window.__OPEN_LK_LEGAL_ENTITY__ = true;
+
+    document.addEventListener("submit", (event) => {
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement) || !isCompanyRegistrationForm(form)) return;
+      const submitButton = form.querySelector('button[type="submit"]');
+      const submitText = String(event.submitter?.textContent || submitButton?.textContent || "").trim();
+      if (submitText !== "Зарегистрироваться") return;
+      const draft = collectLegalEntityDraft(form);
+      const validationError = validateLegalEntityDraft(draft);
+      if (validationError) {
+        pendingLegalEntityDraft = null;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        showLegalEntityError(form, validationError.field, validationError.message);
+        return;
+      }
+      pendingLegalEntityDraft = draft;
+    }, true);
+
+    // Планирует сверку блока реквизитов после перерисовки формы.
+    const scheduleLegalEntitySync = () => {
+      if (legalEntitySyncFrame) return;
+      legalEntitySyncFrame = window.requestAnimationFrame(() => {
+        legalEntitySyncFrame = 0;
+        syncLegalEntityRegistrationForm();
+      });
+    };
+
+    document.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target?.closest(".role-choice button")) return;
+      scheduleLegalEntitySync();
+    }, true);
+
+    new MutationObserver(scheduleLegalEntitySync).observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    scheduleLegalEntitySync();
   };
 
   const consumePendingRegistrationToast = () => {
