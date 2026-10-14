@@ -4,7 +4,7 @@
   const API_BASE = "https://pilot.metasymbiont.com/api/v1";
   const PLATFORM_VERSION = "web-1.0.0";
   const TOKEN_KEYS = ["tildaAuthToken", "authToken"];
-  const ASSET_VERSION = "20261013-1";
+  const ASSET_VERSION = "20261014-1";
   // Собирает адрес файла из той же папки, откуда Тильда загрузила этот скрипт.
   const resolveOpenLkAssetUrl = (fileName) => {
     const currentScript = document.currentScript;
