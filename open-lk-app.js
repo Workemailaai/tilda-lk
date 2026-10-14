@@ -410,6 +410,23 @@
       window.setTimeout(resolve, REGISTRATION_LK_SYNC_DELAY_MS);
     });
 
+  // Создаёт карточку компании один раз сразу после регистрации.
+  const createOwnCompanyCard = async (profile) => {
+    const userId = profile.id;
+    const companies = Array.isArray(profile.companies) ? profile.companies : [];
+    const selectedCompany = companies.find((company) => company.favorite === true) || companies[0];
+    const companyId = selectedCompany?.company?.id || userId;
+    try {
+      await request(
+        "POST",
+        `/lk/user/company/${encodeURIComponent(companyId)}/cards/${encodeURIComponent(userId)}`,
+        {},
+      );
+    } catch (error) {
+      console.error("Ошибка создания карточки после регистрации:", error);
+    }
+  };
+
   const auth = {
     async login({ login, password }) {
       const normalizedLogin = apiPhone(login);
@@ -505,6 +522,7 @@
       if (!createdUser?.id) {
         throw new Error("Регистрация выполнена, но сервер не вернул id пользователя.");
       }
+      await createOwnCompanyCard(createdUser);
       await request(
         "PUT",
         "/lk/user",
