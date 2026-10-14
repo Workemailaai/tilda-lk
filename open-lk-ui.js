@@ -63606,6 +63606,34 @@ Minimum version required to store current data is: ` +
   const collectBasketTariffIds = (basketItems) =>
     basketItems.map((basketItem) => basketItem.planId).filter(Boolean);
 
+  // Возвращает цену тарифа в копейках из уже загруженного списка.
+  const catalogAmountKopeks = (planId) => {
+    const plan = findPlan(planId);
+    const rubles = Number(plan?.totalAmount ?? plan?.price);
+    if (!Number.isFinite(rubles)) return 0;
+    return Math.round(rubles * 100);
+  };
+
+  // Складывает цены тарифов в корзине, пока плательщик не выбран.
+  const collectCatalogTotalKopeks = (basketItems) =>
+    basketItems.reduce((sum, basketItem) => sum + catalogAmountKopeks(basketItem.planId), 0);
+
+  // Возвращает подпись суммы позиции, пока нет актуального payment-quotes.
+  const resolvePreviewAmountLabel = (planId, quoteLoading, currentPayerId) => {
+    if (!currentPayerId) return formatKopeks(catalogAmountKopeks(planId));
+    if (quoteLoading) return "Считаем…";
+    return "—";
+  };
+
+  // Возвращает итог: цены тарифов без плательщика и сумму payment-quotes после выбора.
+  const resolveRealBasketTotal = (basketItems, quote, quoteLoading, currentPayerId) => {
+    if (!basketItems.length) return formatKopeks(0);
+    if (quote && !quoteLoading) return formatKopeks(quote.totalAmountKopeks);
+    if (!currentPayerId) return formatKopeks(collectCatalogTotalKopeks(basketItems));
+    if (quoteLoading) return "Считаем…";
+    return "—";
+  };
+
   // Проверяет, что расчёт payment-quotes ещё действует для текущих тарифов и плательщика.
   const isCartQuoteCurrent = (quote, tariffIds, currentPayerId) => {
     if (!quote || !quote.quoteId || !quote.validUntil || quote.payerId !== currentPayerId)
@@ -63816,8 +63844,8 @@ Minimum version required to store current data is: ` +
         ),
       );
     }
-    // Показывает позицию, пока payment-quotes ещё считает сумму.
-    function renderPendingBasketItem(basketItem) {
+    // Показывает позицию по цене тарифа или пока payment-quotes ещё считает сумму.
+    function renderPendingBasketItem(basketItem, amountLabel) {
       const plan = findPlan(basketItem.planId);
       const title = plan ? `${plan.name} — ${plan.tier}` : "Тариф";
       return CheckoutReact.default.createElement(
@@ -63831,7 +63859,7 @@ Minimum version required to store current data is: ` +
           "div",
           null,
           CheckoutReact.default.createElement("strong", null, title),
-          CheckoutReact.default.createElement("span", null, "Считаем…"),
+          CheckoutReact.default.createElement("span", null, amountLabel),
         ),
         CheckoutReact.default.createElement(
           "button",
@@ -63882,14 +63910,19 @@ Minimum version required to store current data is: ` +
         ),
       );
     }
-    // Собирает строки корзины из расчёта API или из демо-расчёта.
+    // Собирает строки корзины из цен тарифов, расчёта API или демо-расчёта.
     function renderBasketItems() {
       if (realMode) {
         if (!basket.length) return renderEmptyBasket();
-        if (isQuoteLoading || !cartQuote || !Array.isArray(cartQuote.items)) {
-          return basket.map((basketItem) => renderPendingBasketItem(basketItem));
+        if (!isQuoteLoading && cartQuote && Array.isArray(cartQuote.items)) {
+          return cartQuote.items.map((quoteItem) => renderQuotedBasketItem(quoteItem));
         }
-        return cartQuote.items.map((quoteItem) => renderQuotedBasketItem(quoteItem));
+        return basket.map((basketItem) =>
+          renderPendingBasketItem(
+            basketItem,
+            resolvePreviewAmountLabel(basketItem.planId, isQuoteLoading, payerId),
+          ),
+        );
       }
       if (!quotes.length) return renderEmptyBasket();
       return quotes.map((eA) => {
@@ -64540,11 +64573,7 @@ Minimum version required to store current data is: ` +
                   "strong",
                   null,
                   realMode
-                    ? !basket.length
-                      ? formatKopeks(0)
-                      : cartQuote && !isQuoteLoading
-                        ? formatKopeks(cartQuote.totalAmountKopeks)
-                        : "Считаем…"
+                    ? resolveRealBasketTotal(basket, cartQuote, isQuoteLoading, payerId)
                     : formatCurrency(total),
                 ),
               ),
