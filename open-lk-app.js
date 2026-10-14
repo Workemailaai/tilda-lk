@@ -780,12 +780,13 @@
     };
   };
 
+  // Карточка подписки: пустой access.until не заменяется текущим временем
   const mapSubscriptionCard = (item, activeTariffs, payers, now) => {
     const active = activeTariffs.find((tariff) => tariff?.subscriptionId === item.subscriptionId);
     const until = active?.currentPeriodEnd || item?.access?.until || null;
     const start = active?.currentPeriodStart || null;
-    const end = dateMs(until, now);
-    const startMs = dateMs(start, Math.min(now, end));
+    const end = until ? dateMs(until, now) : null;
+    const startMs = start ? dateMs(start, now) : Number.isFinite(end) ? Math.min(now, end) : null;
     const payerId = item?.payer?.id || "";
     const payer = payerId ? payers.find((candidate) => candidate.id === payerId) : null;
     const statusCode = item?.status?.code || "";

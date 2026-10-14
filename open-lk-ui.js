@@ -60310,7 +60310,9 @@ Minimum version required to store current data is: ` +
         : void 0) ||
       availablePlans.find((e) => e.id === A) ||
       globalThis.__OPEN_LK_REAL_PLANS__?.find((e) => e.id === A || e.code === A),
-    getRemainingDays = (A, e) => Math.max(0, Math.ceil((A.end - e) / DAY_MS)),
+    // Дни до access.until; null значит, что даты окончания в ответе нет
+    getRemainingDays = (A, e) =>
+      Number.isFinite(A.end) ? Math.max(0, Math.ceil((A.end - e) / DAY_MS)) : null,
     formatDate = (A) =>
       new Date(A)
         .toLocaleDateString("ru-RU", {
@@ -60319,7 +60321,13 @@ Minimum version required to store current data is: ` +
           year: "numeric",
         })
         .replace(/\sг\.$/, ""),
-    getSubscriptionStatus = (A, e) => (A.end > e ? "active" : "expired"),
+    // Текст «Доступ до» без подмены пустой даты сегодняшним днём
+    formatAccessUntil = (A) => (Number.isFinite(A) ? formatDate(A) : "Бессрочно"),
+    // Сравнение даты окончания с текущим временем, если код статуса не задан
+    getSubscriptionStatus = (A, e) => (Number.isFinite(A.end) && A.end > e ? "active" : "expired"),
+    // Бейдж статуса: код ACTIVE из ответа API, иначе сравнение с датой окончания
+    resolveDisplayedSubscriptionStatus = (A, e) =>
+      String(A?.status || "").toUpperCase() === "ACTIVE" ? "active" : getSubscriptionStatus(A, e),
     COMPANY_REQUIRED_FIELDS = ["name", "inn", "kpp", "ogrn", "address", "account", "bik", "bank"];
 
   function validatePayer(payer) {
@@ -60452,6 +60460,7 @@ Minimum version required to store current data is: ` +
     );
   }
 
+  // Расчёт заказа: отсутствие даты окончания не даёт дробный остаток дней
   function calculateOrderQuote(state, item) {
     let plan = findPlan(item.planId),
       existingSubscription = state.subs.find((h) => findPlan(h.planId)?.product === plan.product),
@@ -60466,7 +60475,7 @@ Minimum version required to store current data is: ` +
       end = state.clock + item.months * 30 * DAY_MS;
     if (isActive && plan.price > currentPlan.price) {
       kind = "upgrade";
-      let h = getRemainingDays(existingSubscription, state.clock);
+      let h = getRemainingDays(existingSubscription, state.clock) ?? 0;
       ((total = Math.ceil(((plan.price - currentPlan.price) * h) / 30)),
         (credit = Math.ceil((currentPlan.price * h) / 30)),
         (end = existingSubscription.end),
@@ -60489,7 +60498,7 @@ Minimum version required to store current data is: ` +
       end: end,
       months: kind === "upgrade" ? existingSubscription.months : item.months,
       subId: existingSubscription?.id,
-      days: existingSubscription ? getRemainingDays(existingSubscription, state.clock) : 0,
+      days: existingSubscription ? (getRemainingDays(existingSubscription, state.clock) ?? 0) : 0,
     };
   }
 
@@ -61860,8 +61869,12 @@ Minimum version required to store current data is: ` +
 
   var ProductsReact = interopModule(loadReact(), 1);
 
+  // Список подписок: статус бейджа берётся из кода ответа, а не из пустой даты
   function ProductsPage({ state, onCatalog, onManage, onOpen, onBuy }) {
-    let expiringSubscriptions = state.subs.filter((i) => getRemainingDays(i, state.clock) <= 5);
+    let expiringSubscriptions = state.subs.filter((i) => {
+      const remainingDays = getRemainingDays(i, state.clock);
+      return remainingDays !== null && remainingDays <= 5;
+    });
     return ProductsReact.default.createElement(
       ProductsReact.default.Fragment,
       null,
@@ -61935,7 +61948,7 @@ Minimum version required to store current data is: ` +
         state.subs.map((i) => {
           let n = findPlan(i.planId),
             o = state.payers.find((E) => E.id === i.payerId),
-            s = getSubscriptionStatus(i, state.clock);
+            s = resolveDisplayedSubscriptionStatus(i, state.clock);
           return ProductsReact.default.createElement(
             "article",
             {
@@ -62008,7 +62021,7 @@ Minimum version required to store current data is: ` +
                 "div",
                 null,
                 ProductsReact.default.createElement("dt", null, "Доступ до"),
-                ProductsReact.default.createElement("dd", null, formatDate(i.end)),
+                ProductsReact.default.createElement("dd", null, formatAccessUntil(i.end)),
               ),
               ProductsReact.default.createElement(
                 "div",
@@ -62083,6 +62096,7 @@ Minimum version required to store current data is: ` +
     );
   }
 
+  // Карточка подписки: бессрочный доступ без until не показывается как истёкший
   function SubscriptionDetailsPage({ state, sub, onBuy, onAuto, onPayments }) {
     let plan = findPlan(sub.planId),
       payer = state.payers.find((s) => s.id === sub.payerId),
@@ -62107,7 +62121,7 @@ Minimum version required to store current data is: ` +
           ProductsReact.default.createElement("p", null, plan.tier),
         ),
         ProductsReact.default.createElement(StatusBadge, {
-          status: getSubscriptionStatus(sub, state.clock),
+          status: resolveDisplayedSubscriptionStatus(sub, state.clock),
         }),
       ),
       ProductsReact.default.createElement(
@@ -62168,15 +62182,17 @@ Minimum version required to store current data is: ` +
           ProductsReact.default.createElement(
             "dd",
             null,
-            formatDate(sub.end),
+            formatAccessUntil(sub.end),
             ProductsReact.default.createElement(
               "small",
               {
-                className: remainingDays <= 5 ? "warning" : "muted",
+                className: remainingDays !== null && remainingDays <= 5 ? "warning" : "muted",
               },
-              remainingDays > 0
-                ? "Осталось " + remainingDays + " " + pluralizeDay(remainingDays)
-                : "Доступ завершён",
+              remainingDays === null
+                ? "Без ограничения по дате"
+                : remainingDays > 0
+                  ? "Осталось " + remainingDays + " " + pluralizeDay(remainingDays)
+                  : "Доступ завершён",
             ),
           ),
         ),
@@ -63646,6 +63662,7 @@ Minimum version required to store current data is: ` +
     return quotedTariffIds.every((tariffId, index) => tariffId === selectedTariffIds[index]);
   };
 
+  // Магазин: подписка без даты окончания не помечается как истёкшая
   function ShopPage({
     state,
     basket,
@@ -64195,10 +64212,14 @@ Minimum version required to store current data is: ` +
                         IA = getRemainingDays(eA, state.clock),
                         uA = Number.isFinite(Number(eA.remainingPercent))
                           ? Number(eA.remainingPercent)
-                          : Math.min(
-                              100,
-                              Math.max(0, ((eA.end - state.clock) / (eA.end - eA.start)) * 100),
-                            );
+                          : Number.isFinite(eA.end) &&
+                              Number.isFinite(eA.start) &&
+                              eA.end !== eA.start
+                            ? Math.min(
+                                100,
+                                Math.max(0, ((eA.end - state.clock) / (eA.end - eA.start)) * 100),
+                              )
+                            : 100;
                       return CheckoutReact.default.createElement(
                         "article",
                         {
@@ -64227,20 +64248,22 @@ Minimum version required to store current data is: ` +
                             CheckoutReact.default.createElement(
                               "p",
                               null,
-                              IA > 0
-                                ? CheckoutReact.default.createElement(
-                                    CheckoutReact.default.Fragment,
-                                    null,
-                                    "Осталось ",
-                                    CheckoutReact.default.createElement(
-                                      "strong",
+                              IA === null
+                                ? "Бессрочный доступ"
+                                : IA > 0
+                                  ? CheckoutReact.default.createElement(
+                                      CheckoutReact.default.Fragment,
                                       null,
-                                      IA,
-                                      " ",
-                                      pluralizeDay(IA),
-                                    ),
-                                  )
-                                : "Срок подписки истёк",
+                                      "Осталось ",
+                                      CheckoutReact.default.createElement(
+                                        "strong",
+                                        null,
+                                        IA,
+                                        " ",
+                                        pluralizeDay(IA),
+                                      ),
+                                    )
+                                  : "Срок подписки истёк",
                             ),
                           ),
                         ),
@@ -64268,8 +64291,8 @@ Minimum version required to store current data is: ` +
                           CheckoutReact.default.createElement(
                             "span",
                             null,
-                            IA > 0 ? "Действует до " : "Доступ завершён ",
-                            formatDate(eA.end),
+                            IA === null ? "" : IA > 0 ? "Действует до " : "Доступ завершён ",
+                            formatAccessUntil(eA.end),
                           ),
                           CheckoutReact.default.createElement(
                             "div",
@@ -64887,6 +64910,7 @@ Minimum version required to store current data is: ` +
     }
   }
 
+  // Оболочка личного кабинета: предупреждение об окончании только при известной дате until
   function OpenLkApp() {
     let [state, setState] = (0, AppReact.useState)(getInitialState),
       [route, setRoute] = (0, AppReact.useState)(globalThis.__OPEN_LK_ROUTE__ || "subscriptions"),
@@ -65173,7 +65197,10 @@ Minimum version required to store current data is: ` +
         showToast("Тестовое состояние применено"));
     }
     let expiringMessages = state.subs
-        .filter((G) => getRemainingDays(G, state.clock) <= 5)
+        .filter((G) => {
+          const remainingDays = getRemainingDays(G, state.clock);
+          return remainingDays !== null && remainingDays <= 5;
+        })
         .map(
           (G) =>
             findPlan(G.planId).name +
