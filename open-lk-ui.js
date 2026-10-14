@@ -63022,6 +63022,7 @@ Minimum version required to store current data is: ` +
     function switchMode(C) {
       (setMode(C), setStep(0), setFormValues({}), setFormError(""));
     }
+    // Отправляет вход, регистрацию или восстановление пароля.
     async function submit(C) {
       (C.preventDefault(), setFormError(""));
       const auth = window.__OPEN_LK_AUTH__;
@@ -63055,6 +63056,8 @@ Minimum version required to store current data is: ` +
             return setFormError("Введите 6-значный код из SMS.");
           if (!auth?.confirmRegister) return setFormError("Авторизация через Прораба недоступна.");
           try {
+            if (typeof window.__OPEN_LK_SHOW_PRELOADER__ === "function")
+              window.__OPEN_LK_SHOW_PRELOADER__();
             await auth.confirmRegister({
               login: formValues.phone,
               password: formValues.password,
@@ -63073,6 +63076,8 @@ Minimum version required to store current data is: ` +
             onLogin();
             return;
           } catch (error) {
+            if (typeof window.__OPEN_LK_HIDE_PRELOADER__ === "function")
+              window.__OPEN_LK_HIDE_PRELOADER__();
             return setFormError(error?.message || "Ошибка регистрации.");
           }
         }

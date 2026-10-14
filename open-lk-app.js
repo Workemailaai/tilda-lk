@@ -402,6 +402,14 @@
 
   let pendingLegalEntityDraft = null;
 
+  const REGISTRATION_LK_SYNC_DELAY_MS = 2000;
+
+  // Ждёт, пока новый аккаунт появится в сервисе ЛК.
+  const waitForRegistrationProfile = () =>
+    new Promise((resolve) => {
+      window.setTimeout(resolve, REGISTRATION_LK_SYNC_DELAY_MS);
+    });
+
   const auth = {
     async login({ login, password }) {
       const normalizedLogin = apiPhone(login);
@@ -492,6 +500,7 @@
           );
       throwRegistrationValidation(data);
       saveToken(extractToken(data));
+      await waitForRegistrationProfile();
       const createdUser = await request("GET", "/lk/user");
       if (!createdUser?.id) {
         throw new Error("Регистрация выполнена, но сервер не вернул id пользователя.");
