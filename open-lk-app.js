@@ -1346,27 +1346,34 @@
     return normalizePayer(response);
   };
 
-  const createRealCartCheckout = async ({ items, payerId }) => {
+  // Оформляет одну оплату в Точка Банк по готовому quoteId или сначала считает корзину.
+  const createRealCartCheckout = async ({ items, payerId, quoteId }) => {
     const organizationId = window.__OPEN_LK_REAL_STATE__?.organizationId || "";
     if (!organizationId) throw new Error("Не определена организация для оформления покупки.");
-    if (!payerId) throw new Error("Не выбран плательщик.");
-    if (!Array.isArray(items) || !items.length) throw new Error("Не выбраны тарифы.");
-    const tariffIds = items.map((item) => item.tariffId || item.planId).filter(Boolean);
-    if (!tariffIds.length) throw new Error("Не удалось определить выбранные тарифы.");
-    const quote = await subscriptionsApi.quoteCartPayment(organizationId, {
-      tariffIds,
-      payerId,
-      corpusNumber: DEFAULT_CORPUS_NUMBER,
-    });
-    if (!quote?.quoteId) throw new Error("API не вернул quoteId расчёта.");
+    let quote = null;
+    let resolvedQuoteId = quoteId || "";
+    if (!resolvedQuoteId) {
+      if (!payerId) throw new Error("Не выбран плательщик.");
+      if (!Array.isArray(items) || !items.length) throw new Error("Не выбраны тарифы.");
+      const tariffIds = items.map((item) => item.tariffId || item.planId).filter(Boolean);
+      if (!tariffIds.length) throw new Error("Не удалось определить выбранные тарифы.");
+      quote = await subscriptionsApi.quoteCartPayment(organizationId, {
+        tariffIds,
+        payerId,
+        corpusNumber: DEFAULT_CORPUS_NUMBER,
+      });
+      resolvedQuoteId = quote && quote.quoteId;
+    }
+    if (!resolvedQuoteId) throw new Error("API не вернул quoteId расчёта.");
     const checkout = await subscriptionsApi.createCartCheckout(
       organizationId,
       {
-        quoteId: quote.quoteId,
+        quoteId: resolvedQuoteId,
       },
       crypto.randomUUID(),
     );
-    if (!checkout?.id) throw new Error("API не вернул id оформления.");
+    if (!checkout.id) throw new Error("API не вернул id оформления.");
+    if (!checkout.paymentLink) throw new Error("API не вернул ссылку на оплату.");
     return {
       quote,
       checkout,

@@ -63593,6 +63593,31 @@ Minimum version required to store current data is: ` +
   var CheckoutReact = interopModule(loadReact(), 1),
     JsPdf = interopModule(loadQrCode(), 1);
 
+  // Показывает сумму из копеек ответа API с двумя знаками после запятой.
+  const formatKopeks = (amountKopeks) => {
+    const rubles = Math.round(Number(amountKopeks)) / 100;
+    return `${new Intl.NumberFormat("ru-RU", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(rubles)} ₽`;
+  };
+
+  // Возвращает идентификаторы тарифов, которые лежат в корзине.
+  const collectBasketTariffIds = (basketItems) =>
+    basketItems.map((basketItem) => basketItem.planId).filter(Boolean);
+
+  // Проверяет, что расчёт payment-quotes ещё действует для текущих тарифов и плательщика.
+  const isCartQuoteCurrent = (quote, tariffIds, currentPayerId) => {
+    if (!quote || !quote.quoteId || !quote.validUntil || quote.payerId !== currentPayerId)
+      return false;
+    if (Date.parse(quote.validUntil) <= Date.now()) return false;
+    if (!Array.isArray(quote.items)) return false;
+    const quotedTariffIds = quote.items.map((quoteItem) => quoteItem.tariffId).sort();
+    const selectedTariffIds = [...tariffIds].sort();
+    if (quotedTariffIds.length !== selectedTariffIds.length) return false;
+    return quotedTariffIds.every((tariffId, index) => tariffId === selectedTariffIds[index]);
+  };
+
   function ShopPage({
     state,
     basket,
@@ -63615,32 +63640,22 @@ Minimum version required to store current data is: ` +
     let [periodMonths, setPeriodMonths] = (0, CheckoutReact.useState)(1),
       [paymentOpen, setPaymentOpen] = (0, CheckoutReact.useState)(!1),
       [formError, setFormError] = (0, CheckoutReact.useState)(""),
+      [cartQuote, setCartQuote] = (0, CheckoutReact.useState)(null),
+      [isQuoteLoading, setIsQuoteLoading] = (0, CheckoutReact.useState)(!1),
+      [isCheckoutLoading, setIsCheckoutLoading] = (0, CheckoutReact.useState)(!1),
+      checkoutLock = (0, CheckoutReact.useRef)(!1),
       selectedPayer = state.payers.find((eA) => eA.id === payerId),
       realMode = Boolean(globalThis.__OPEN_LK_REAL_MODE__),
       periodTariffs = Array.isArray(state.tariffsByPeriod?.[periodMonths])
         ? state.tariffsByPeriod[periodMonths]
         : [],
-      findTariff = (eA) => periodTariffs.find((gA) => gA.id === eA || gA.code === eA),
       cartItems = basket.map((eA) => ({
         ...eA,
         months: periodMonths,
       })),
-      quotes =
-        realMode && periodTariffs.length
-          ? cartItems.map((eA) => {
-              let gA = findTariff(eA.planId),
-                IA = gA?.totalAmount ?? gA?.price ?? 0;
-              return {
-                ...eA,
-                total: IA,
-                product: gA?.product || eA.product,
-                planName: gA ? `${gA.name} · ${gA.tier}` : eA.planName,
-                kind: "new",
-                days: periodMonths * 30,
-              };
-            })
-          : cartItems.map((eA) => calculateOrderQuote(state, eA)),
+      quotes = realMode ? [] : cartItems.map((eA) => calculateOrderQuote(state, eA)),
       total = quotes.reduce((eA, gA) => eA + gA.total, 0),
+      basketTariffIds = collectBasketTariffIds(basket),
       documents =
         realMode && Array.isArray(state.documents)
           ? state.documents
@@ -63686,6 +63701,39 @@ Minimum version required to store current data is: ` +
         setFormError(""),
         toast("Набор добавлен. Сумма пересчитана по текущим условиям."));
     }
+    // Запрашивает расчёт корзины, когда меняются тарифы или плательщик.
+    (0, CheckoutReact.useEffect)(() => {
+      if (!realMode) return undefined;
+      const actions = globalThis.__OPEN_LK_REAL_ACTIONS__;
+      if (!basketTariffIds.length || !payerId || !actions?.quoteCartPayment) {
+        setCartQuote(null);
+        setIsQuoteLoading(false);
+        return undefined;
+      }
+      let isCancelled = false;
+      setIsQuoteLoading(true);
+      actions
+        .quoteCartPayment({
+          tariffIds: basketTariffIds,
+          payerId,
+        })
+        .then((quote) => {
+          if (isCancelled) return;
+          setCartQuote(quote);
+          setIsQuoteLoading(false);
+          setFormError("");
+        })
+        .catch((error) => {
+          if (isCancelled) return;
+          setCartQuote(null);
+          setIsQuoteLoading(false);
+          setFormError(error.message || "Не удалось рассчитать корзину");
+        });
+      return () => {
+        isCancelled = true;
+      };
+    }, [realMode, payerId, basket]);
+    // Отправляет актуальный quoteId одним платежом в Точка Банк.
     async function checkout() {
       if ((setFormError(""), !!basket.length)) {
         const realActions = globalThis.__OPEN_LK_REAL_MODE__ && globalThis.__OPEN_LK_REAL_ACTIONS__;
@@ -63694,27 +63742,36 @@ Minimum version required to store current data is: ` +
             setFormError("Выберите плательщика перед оплатой.");
             return;
           }
+          if (checkoutLock.current || isQuoteLoading) return;
+          checkoutLock.current = true;
+          setIsCheckoutLoading(true);
           try {
-            const result = await realActions.createCartCheckout({
-                items: basket.map((eA) => ({
-                  tariffId: eA.planId,
-                  planId: eA.planId,
-                })),
-                payerId: payerId,
-              }),
-              checkout = result?.checkout || result;
-            if (checkout?.paymentLink) {
-              (setBasket([]),
-                setTab("buy"),
-                window.location.assign(checkout.paymentLink),
-                toast("Открываем страницу оплаты."));
-            } else {
-              (setBasket([]),
-                setTab("buy"),
-                toast("Оформление создано. Статус оплаты можно проверить в документах."));
+            let quote = cartQuote;
+            if (!isCartQuoteCurrent(quote, basketTariffIds, payerId)) {
+              const nextQuote = await realActions.quoteCartPayment({
+                tariffIds: basketTariffIds,
+                payerId,
+              });
+              const previousTotal = quote ? quote.totalAmountKopeks : null;
+              setCartQuote(nextQuote);
+              quote = nextQuote;
+              if (previousTotal !== nextQuote.totalAmountKopeks) {
+                setFormError("Сумма пересчитана. Проверьте итог и повторите оплату.");
+                return;
+              }
             }
+            const result = await realActions.createCartCheckout({
+              quoteId: quote.quoteId,
+            });
+            setBasket([]);
+            setCartQuote(null);
+            window.location.assign(result.checkout.paymentLink);
+            toast("Открываем страницу оплаты.");
           } catch (eA) {
             setFormError(eA?.message || "Не удалось создать оформление");
+          } finally {
+            checkoutLock.current = false;
+            setIsCheckoutLoading(false);
           }
           return;
         }
@@ -63738,6 +63795,145 @@ Minimum version required to store current data is: ` +
       } catch (IA) {
         throw IA;
       }
+    }
+    // Показывает пустую корзину.
+    function renderEmptyBasket() {
+      return CheckoutReact.default.createElement(
+        "div",
+        {
+          className: "basket-empty",
+        },
+        CheckoutReact.default.createElement(Icon, {
+          name: "plus",
+          size: 25,
+        }),
+        CheckoutReact.default.createElement(
+          "p",
+          null,
+          "Добавьте нужные тарифы",
+          CheckoutReact.default.createElement("br", null),
+          "из списка слева",
+        ),
+      );
+    }
+    // Показывает позицию, пока payment-quotes ещё считает сумму.
+    function renderPendingBasketItem(basketItem) {
+      const plan = findPlan(basketItem.planId);
+      const title = plan ? `${plan.name} — ${plan.tier}` : "Тариф";
+      return CheckoutReact.default.createElement(
+        "div",
+        {
+          className: "basket-item",
+          key: basketItem.planId,
+        },
+        plan ? CheckoutReact.default.createElement(ProductIcon, { plan }) : null,
+        CheckoutReact.default.createElement(
+          "div",
+          null,
+          CheckoutReact.default.createElement("strong", null, title),
+          CheckoutReact.default.createElement("span", null, "Считаем…"),
+        ),
+        CheckoutReact.default.createElement(
+          "button",
+          {
+            className: "icon-button",
+            "aria-label": `Удалить ${title} из оплаты`,
+            onClick: () => setBasket(basket.filter((item) => item.planId !== basketItem.planId)),
+          },
+          CheckoutReact.default.createElement(Icon, {
+            name: "close",
+            size: 16,
+          }),
+        ),
+      );
+    }
+    // Показывает позицию по полям ответа payment-quotes.
+    function renderQuotedBasketItem(quoteItem) {
+      const plan = findPlan(quoteItem.tariffId);
+      return CheckoutReact.default.createElement(
+        "div",
+        {
+          className: "basket-item",
+          key: quoteItem.tariffId,
+        },
+        plan ? CheckoutReact.default.createElement(ProductIcon, { plan }) : null,
+        CheckoutReact.default.createElement(
+          "div",
+          null,
+          CheckoutReact.default.createElement(
+            "strong",
+            null,
+            `${quoteItem.productName} — ${quoteItem.planName}`,
+          ),
+          CheckoutReact.default.createElement("span", null, formatKopeks(quoteItem.amountKopeks)),
+          CheckoutReact.default.createElement("small", null, quoteItem.description),
+        ),
+        CheckoutReact.default.createElement(
+          "button",
+          {
+            className: "icon-button",
+            "aria-label": `Удалить ${quoteItem.productName} из оплаты`,
+            onClick: () => setBasket(basket.filter((item) => item.planId !== quoteItem.tariffId)),
+          },
+          CheckoutReact.default.createElement(Icon, {
+            name: "close",
+            size: 16,
+          }),
+        ),
+      );
+    }
+    // Собирает строки корзины из расчёта API или из демо-расчёта.
+    function renderBasketItems() {
+      if (realMode) {
+        if (!basket.length) return renderEmptyBasket();
+        if (isQuoteLoading || !cartQuote || !Array.isArray(cartQuote.items)) {
+          return basket.map((basketItem) => renderPendingBasketItem(basketItem));
+        }
+        return cartQuote.items.map((quoteItem) => renderQuotedBasketItem(quoteItem));
+      }
+      if (!quotes.length) return renderEmptyBasket();
+      return quotes.map((eA) => {
+        let gA = findPlan(eA.planId);
+        return CheckoutReact.default.createElement(
+          "div",
+          {
+            className: "basket-item",
+            key: eA.product,
+          },
+          CheckoutReact.default.createElement(ProductIcon, {
+            plan: gA,
+          }),
+          CheckoutReact.default.createElement(
+            "div",
+            null,
+            CheckoutReact.default.createElement("strong", null, gA.name, " — ", gA.tier),
+            CheckoutReact.default.createElement("span", null, formatCurrency(eA.total)),
+            CheckoutReact.default.createElement(
+              "small",
+              null,
+              eA.kind === "upgrade"
+                ? "Апгрейд · доплата за " + eA.days + " дн."
+                : eA.kind === "downgrade"
+                  ? "Новый тариф с " + formatDate(eA.start)
+                  : eA.kind === "renew"
+                    ? "Продление на месяц"
+                    : "Подключение на месяц",
+            ),
+          ),
+          CheckoutReact.default.createElement(
+            "button",
+            {
+              className: "icon-button",
+              "aria-label": "Удалить " + gA.name + " из оплаты",
+              onClick: () => setBasket(basket.filter((IA) => IA.planId !== eA.planId)),
+            },
+            CheckoutReact.default.createElement(Icon, {
+              name: "close",
+              size: 16,
+            }),
+          ),
+        );
+      });
     }
     let header = CheckoutReact.default.createElement(
       CheckoutReact.default.Fragment,
@@ -64242,77 +64438,7 @@ Minimum version required to store current data is: ` +
                 {
                   className: "basket-items",
                 },
-                quotes.length
-                  ? quotes.map((eA) => {
-                      let gA = findPlan(eA.planId);
-                      return CheckoutReact.default.createElement(
-                        "div",
-                        {
-                          className: "basket-item",
-                          key: eA.product,
-                        },
-                        CheckoutReact.default.createElement(ProductIcon, {
-                          plan: gA,
-                        }),
-                        CheckoutReact.default.createElement(
-                          "div",
-                          null,
-                          CheckoutReact.default.createElement(
-                            "strong",
-                            null,
-                            gA.name,
-                            " — ",
-                            gA.tier,
-                          ),
-                          CheckoutReact.default.createElement(
-                            "span",
-                            null,
-                            formatCurrency(eA.total),
-                          ),
-                          CheckoutReact.default.createElement(
-                            "small",
-                            null,
-                            eA.kind === "upgrade"
-                              ? "Апгрейд · доплата за " + eA.days + " дн."
-                              : eA.kind === "downgrade"
-                                ? "Новый тариф с " + formatDate(eA.start)
-                                : eA.kind === "renew"
-                                  ? "Продление на месяц"
-                                  : "Подключение на месяц",
-                          ),
-                        ),
-                        CheckoutReact.default.createElement(
-                          "button",
-                          {
-                            className: "icon-button",
-                            "aria-label": "Удалить " + gA.name + " из оплаты",
-                            onClick: () =>
-                              setBasket(basket.filter((IA) => IA.planId !== eA.planId)),
-                          },
-                          CheckoutReact.default.createElement(Icon, {
-                            name: "close",
-                            size: 16,
-                          }),
-                        ),
-                      );
-                    })
-                  : CheckoutReact.default.createElement(
-                      "div",
-                      {
-                        className: "basket-empty",
-                      },
-                      CheckoutReact.default.createElement(Icon, {
-                        name: "plus",
-                        size: 25,
-                      }),
-                      CheckoutReact.default.createElement(
-                        "p",
-                        null,
-                        "Добавьте нужные тарифы",
-                        CheckoutReact.default.createElement("br", null),
-                        "из списка слева",
-                      ),
-                    ),
+                renderBasketItems(),
               ),
               CheckoutReact.default.createElement(
                 "div",
@@ -64410,7 +64536,17 @@ Minimum version required to store current data is: ` +
                   className: "basket-total",
                 },
                 CheckoutReact.default.createElement("span", null, "Итого к оплате"),
-                CheckoutReact.default.createElement("strong", null, formatCurrency(total)),
+                CheckoutReact.default.createElement(
+                  "strong",
+                  null,
+                  realMode
+                    ? !basket.length
+                      ? formatKopeks(0)
+                      : cartQuote && !isQuoteLoading
+                        ? formatKopeks(cartQuote.totalAmountKopeks)
+                        : "Считаем…"
+                    : formatCurrency(total),
+                ),
               ),
               formError &&
                 CheckoutReact.default.createElement(
@@ -64425,10 +64561,12 @@ Minimum version required to store current data is: ` +
                 Button,
                 {
                   variant: "primary full",
-                  disabled: !basket.length,
+                  disabled: !basket.length || isQuoteLoading || isCheckoutLoading,
                   onClick: checkout,
                 },
-                selectedPayer?.type === "company" ? "Сформировать счёт" : "Перейти к оплате",
+                realMode || selectedPayer?.type !== "company"
+                  ? "Перейти к оплате"
+                  : "Сформировать счёт",
               ),
               CheckoutReact.default.createElement(
                 "p",
