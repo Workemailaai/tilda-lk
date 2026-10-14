@@ -1,25 +1,38 @@
 (function () {
   "use strict";
-
   const API_BASE = "https://pilot.metasymbiont.com/api/v1";
+
   const PLATFORM_VERSION = "web-1.0.0";
+
   const TOKEN_KEYS = ["tildaAuthToken", "authToken"];
+
   const ASSET_VERSION = "20261014-1";
+  // Собирает адрес файла из той же папки, откуда Тильда загрузила этот скрипт.
+
   // Собирает адрес файла из той же папки, откуда Тильда загрузила этот скрипт.
   const resolveOpenLkAssetUrl = (fileName) => {
     const currentScript = document.currentScript;
-    const scriptSource = currentScript && currentScript.src
-      ? currentScript.src
-      : (document.querySelector('script[src*="open-lk-app.js"]') || {}).src;
+    const scriptSource =
+      currentScript && currentScript.src
+        ? currentScript.src
+        : (document.querySelector('script[src*="open-lk-app.js"]') || {}).src;
     return new URL(fileName + "?v=" + ASSET_VERSION, scriptSource || window.location.href).href;
   };
+
   const UI_URL = resolveOpenLkAssetUrl("open-lk-ui.js");
+
   const CSS_URL = resolveOpenLkAssetUrl("open-lk.css");
+
   const DEMO_KEY = "openLkDemoMode";
+
   const LK_ENTRY_PENDING_KEY = "openLkEntryCurtainPending";
+
   const POST_AUTH_ROUTE_KEY = "meta_lk_post_auth_route";
+
   const PENDING_TOAST_KEY = "meta_lk_pending_toast";
+
   const TARIFF_INTENT_KEY = "meta_lk_tariff_purchase_intent";
+
   const SUPPORTED_TARIFF_CODES = new Set([
     "AGENTPTO_STANDARD_1M",
     "METAPRORAB_FREE_1M",
@@ -48,10 +61,15 @@
 `;
 
   let entryPreloader = null;
+
   let entryPreloaderLeft = false;
+
   let entryPreloaderSafetyTimer = null;
+
   let entryPreloaderRemovalTimer = null;
+
   const ENTRY_PRELOADER_SAFETY_MS = 12000;
+
   const CSS_LOAD_TIMEOUT_MS = 5000;
 
   const clearEntryPreloaderSafetyTimer = () => {
@@ -81,11 +99,13 @@
 
   const isKnownLkPath = (path) => {
     const normalized = String(path || "/").replace(/\/+$/, "") || "/";
-    return normalized === "/login" ||
+    return (
+      normalized === "/login" ||
       normalized === "/subscriptions" ||
       normalized === "/tariffs" ||
       normalized === "/profile" ||
-      normalized === "/help";
+      normalized === "/help"
+    );
   };
 
   const hasPendingLkEntryCurtain = () => {
@@ -99,26 +119,24 @@
   const setPendingLkEntryCurtain = () => {
     try {
       sessionStorage.setItem(LK_ENTRY_PENDING_KEY, "1");
-    } catch { }
+    } catch {}
   };
 
   const clearPendingLkEntryCurtain = () => {
     try {
       sessionStorage.removeItem(LK_ENTRY_PENDING_KEY);
-    } catch { }
+    } catch {}
   };
 
   const shouldShowLkEntryCurtain = () => {
     // A pending marker carries the entry transition across /subscriptions -> /login
     // when an unauthenticated visitor is redirected to the auth page.
     if (hasPendingLkEntryCurtain()) return true;
-
     const referrer = document.referrer;
     if (!referrer) {
       setPendingLkEntryCurtain();
       return true;
     }
-
     try {
       const referrerUrl = new URL(referrer, window.location.href);
       const isSameOriginLkPage =
@@ -127,8 +145,7 @@
       // Navigation between LK pages is ordinary internal navigation: never show the
       // entry curtain there. Any other referrer means the user entered the LK.
       if (isSameOriginLkPage) return false;
-    } catch { }
-
+    } catch {}
     setPendingLkEntryCurtain();
     return true;
   };
@@ -137,12 +154,14 @@
     // Every LK document gets the existing five-dot preloader. Only a true LK entry
     // gets the curtain animation; ordinary LK pages use the same loader without the curtain.
     const useCurtain = forceCurtain === null ? shouldShowLkEntryCurtain() : Boolean(forceCurtain);
-
     const foreignLoader = document.getElementById("meta-preloader");
-    if (foreignLoader && foreignLoader !== entryPreloader && foreignLoader.dataset.openLkOwned !== "1") {
+    if (
+      foreignLoader &&
+      foreignLoader !== entryPreloader &&
+      foreignLoader.dataset.openLkOwned !== "1"
+    ) {
       foreignLoader.remove();
     }
-
     if (entryPreloader && document.body && document.body.contains(entryPreloader)) {
       clearEntryPreloaderRemovalTimer();
       clearEntryPreloaderSafetyTimer();
@@ -152,7 +171,6 @@
       armEntryPreloaderSafetyTimer(entryPreloader);
       return entryPreloader;
     }
-
     if (!document.getElementById("meta-entry-preloader-style") && document.head) {
       const style = document.createElement("style");
       style.id = "meta-entry-preloader-style";
@@ -160,7 +178,6 @@
       document.head.appendChild(style);
     }
     if (!document.body) return null;
-
     const loader = document.createElement("div");
     loader.id = "meta-preloader";
     loader.dataset.openLkOwned = "1";
@@ -170,7 +187,8 @@
     loader.style.setProperty("--mp-cycle", "1.15s");
     loader.style.setProperty("--mp-rgb", "196 114 74");
     loader.dataset.useCurtain = useCurtain ? "1" : "0";
-    loader.innerHTML = '<div class="meta-preloader__veil"><span class="meta-preloader__dots" aria-hidden="true">' +
+    loader.innerHTML =
+      '<div class="meta-preloader__veil"><span class="meta-preloader__dots" aria-hidden="true">' +
       '<i style="--mp-color:#DCA028;--mp-index:0"></i>' +
       '<i style="--mp-color:#6155A9;--mp-index:1"></i>' +
       '<i style="--mp-color:#C4724A;--mp-index:2"></i>' +
@@ -185,12 +203,14 @@
   };
 
   const showPagePreloader = () => ensureEntryPreloader(false);
+
   const showEntryPreloader = () => ensureEntryPreloader(true);
 
   const hideEntryPreloader = () => {
-    const loader = entryPreloader && document.body && document.body.contains(entryPreloader)
-      ? entryPreloader
-      : document.getElementById("meta-preloader");
+    const loader =
+      entryPreloader && document.body && document.body.contains(entryPreloader)
+        ? entryPreloader
+        : document.getElementById("meta-preloader");
     if (!loader || entryPreloaderLeft) return;
     clearEntryPreloaderSafetyTimer();
     clearEntryPreloaderRemovalTimer();
@@ -215,6 +235,7 @@
   };
 
   window.__OPEN_LK_SHOW_PRELOADER__ = () => showPagePreloader();
+
   window.__OPEN_LK_HIDE_PRELOADER__ = () => hideEntryPreloader();
 
   const bootstrapEntryPreloader = (useCurtain = null) => {
@@ -286,21 +307,24 @@
     const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
     if (body !== undefined && !isFormData) headers["Content-Type"] = "application/json";
     if (useAuth && token) headers.Authorization = `Bearer ${token}`;
-
     const response = await fetch(`${API_BASE}${endpoint}`, {
       method,
       headers,
-      ...(body !== undefined ? { body: isFormData ? body : JSON.stringify(body) } : {}),
+      ...(body !== undefined
+        ? {
+            body: isFormData ? body : JSON.stringify(body),
+          }
+        : {}),
     });
-
     const text = await response.text();
     let data = {};
     try {
       data = text ? JSON.parse(text) : {};
     } catch {
-      data = { raw: text };
+      data = {
+        raw: text,
+      };
     }
-
     if (!response.ok) {
       const apiMessage =
         data?.errorCause ||
@@ -327,12 +351,12 @@
     typeof data === "string"
       ? data
       : data?.token ||
-      data?.access_token ||
-      data?.data?.token ||
-      data?.data?.access_token ||
-      data?.result?.token ||
-      data?.result?.access_token ||
-      "";
+        data?.access_token ||
+        data?.data?.token ||
+        data?.data?.access_token ||
+        data?.result?.token ||
+        data?.result?.access_token ||
+        "";
 
   const saveToken = (token) => {
     if (!token) throw new Error("Сервер не вернул token");
@@ -344,8 +368,24 @@
 
   const throwRegistrationValidation = (data) => {
     const status = String(data?.status || data?.result?.status || data?.data?.status || "").trim();
-    const code = String(data?.errorCode || data?.code || data?.result?.errorCode || data?.result?.code || data?.data?.errorCode || data?.data?.code || "").trim();
-    const message = String(data?.errorCause || data?.message || data?.detail || data?.error || data?.result?.message || data?.data?.message || "").trim();
+    const code = String(
+      data?.errorCode ||
+        data?.code ||
+        data?.result?.errorCode ||
+        data?.result?.code ||
+        data?.data?.errorCode ||
+        data?.data?.code ||
+        "",
+    ).trim();
+    const message = String(
+      data?.errorCause ||
+        data?.message ||
+        data?.detail ||
+        data?.error ||
+        data?.result?.message ||
+        data?.data?.message ||
+        "",
+    ).trim();
     const combined = `${status} ${code} ${message} ${JSON.stringify(data || {})}`;
     if (
       /USER_ALREADY_REGISTERED|ALREADY_REGISTERED|ALREADY_EXISTS/i.test(combined) ||
@@ -368,28 +408,38 @@
       if (!/^\+7\d{10}$/.test(normalizedLogin)) {
         throw new Error("Некорректный номер телефона.");
       }
-      const data = await request("POST", "/auth/login", {
-        login: normalizedLogin,
-        password,
-        phone: "",
-      }, {}, false);
+      const data = await request(
+        "POST",
+        "/auth/login",
+        {
+          login: normalizedLogin,
+          password,
+          phone: "",
+        },
+        {},
+        false,
+      );
       saveToken(extractToken(data));
       clearDemoMode();
       return data;
     },
-
     async sendRegisterPin({ login }) {
       const normalizedLogin = apiPhone(login);
       if (!/^\+7\d{10}$/.test(normalizedLogin)) {
         throw new Error("Некорректный номер телефона.");
       }
       // Phone numbers are sent to the API in international format with a leading "+".
-      const data = await request("POST", "/auth/user/phone/pin", {
-        login: normalizedLogin,
-      }, {}, false);
+      const data = await request(
+        "POST",
+        "/auth/user/phone/pin",
+        {
+          login: normalizedLogin,
+        },
+        {},
+        false,
+      );
       return throwRegistrationValidation(data);
     },
-
     // Регистрирует физлицо или юрлицо после подтверждения телефона.
     async confirmRegister({ login, password, code, name, surname, mail }) {
       if (!/^\d{6}$/.test(String(code || ""))) {
@@ -397,37 +447,55 @@
       }
       const phone = apiPhone(login);
       const legalDraft = pendingLegalEntityDraft;
-      const confirmation = await request("POST", "/auth/user/phone/pin/confirm", {
-        pin: code,
-        login: phone,
-      }, {}, false);
-
+      const confirmation = await request(
+        "POST",
+        "/auth/user/phone/pin/confirm",
+        {
+          pin: code,
+          login: phone,
+        },
+        {},
+        false,
+      );
       if (confirmation?.status && confirmation.status !== "PHONE_CONFIRMED") {
         throw new Error("Телефон не подтверждён.");
       }
-
       const data = legalDraft
-        ? await request("POST", "/auth/user/legal-entity", {
-          login: phone,
-          password,
-          ...(legalDraft.categories?.length ? { categories: legalDraft.categories } : {}),
-          politicAgreements: true,
-          legalEntity: legalDraft.legalEntity,
-        }, {}, false)
-        : await request("POST", "/auth/user", {
-          login: phone,
-          password,
-          politicAgreements: true,
-          hash: crypto.randomUUID(),
-        }, {}, false);
+        ? await request(
+            "POST",
+            "/auth/user/legal-entity",
+            {
+              login: phone,
+              password,
+              ...(legalDraft.categories?.length
+                ? {
+                    categories: legalDraft.categories,
+                  }
+                : {}),
+              politicAgreements: true,
+              legalEntity: legalDraft.legalEntity,
+            },
+            {},
+            false,
+          )
+        : await request(
+            "POST",
+            "/auth/user",
+            {
+              login: phone,
+              password,
+              politicAgreements: true,
+              hash: crypto.randomUUID(),
+            },
+            {},
+            false,
+          );
       throwRegistrationValidation(data);
       saveToken(extractToken(data));
-
       const createdUser = await request("GET", "/lk/user");
       if (!createdUser?.id) {
         throw new Error("Регистрация выполнена, но сервер не вернул id пользователя.");
       }
-
       await request(
         "PUT",
         "/lk/user",
@@ -438,9 +506,10 @@
           mail: String(mail || "").trim(),
           phoneNumber: apiPhone(phone),
         },
-        { "X-User-Id": createdUser.id }
+        {
+          "X-User-Id": createdUser.id,
+        },
       );
-
       clearDemoMode();
       pendingLegalEntityDraft = null;
       // Navigation after registration is handled by the auth UI so it can persist
@@ -451,88 +520,72 @@
 
   // В текущей модели подписка привязана к корпусу. Для ЛК сейчас
   // используется один объект/корпус, поэтому backend всегда получает "1".
+
+  // В текущей модели подписка привязана к корпусу. Для ЛК сейчас
+  // используется один объект/корпус, поэтому backend всегда получает "1".
   const DEFAULT_CORPUS_NUMBER = "1";
 
   const subscriptionsApi = {
     // Старые контракты, которые всё ещё используются для деталей подписки,
     // отмены и совместимости с уже существующим UI.
     getPlans: () => request("GET", "/subscriptions/plans"),
-
     getOrganizationSubscriptions: (organizationId) =>
       request("GET", `/subscriptions/organizations/${organizationId}`),
-
     getSubscription: (organizationId, subscriptionId) =>
       request("GET", `/subscriptions/organizations/${organizationId}/${subscriptionId}`),
-
     getSchedule: (organizationId, subscriptionId) =>
       request("GET", `/subscriptions/organizations/${organizationId}/${subscriptionId}/schedule`),
-
     cancel: (organizationId, subscriptionId, actorUserId) =>
       request(
         "POST",
-        `/subscriptions/organizations/${organizationId}/${subscriptionId}/cancel?actorUserId=${encodeURIComponent(actorUserId)}`
+        `/subscriptions/organizations/${organizationId}/${subscriptionId}/cancel?actorUserId=${encodeURIComponent(actorUserId)}`,
       ),
-
     getCheckout: (organizationId, checkoutId) =>
       request("GET", `/subscriptions/organizations/${organizationId}/checkouts/${checkoutId}`),
-
     // Новые контракты ЛК.
     getMySubscriptions: (organizationId, filter = "ALL") =>
       request(
         "GET",
-        `/subscriptions/organizations/${organizationId}/my-subscriptions?filter=${encodeURIComponent(filter)}`
+        `/subscriptions/organizations/${organizationId}/my-subscriptions?filter=${encodeURIComponent(filter)}`,
       ),
-
     getTariffs: (organizationId, periodMonths = 1) =>
       request(
         "GET",
-        `/subscriptions/organizations/${organizationId}/tariffs?periodMonths=${encodeURIComponent(periodMonths)}`
+        `/subscriptions/organizations/${organizationId}/tariffs?periodMonths=${encodeURIComponent(periodMonths)}`,
       ),
-
     getPayerDetails: (organizationId) =>
       request("GET", `/subscriptions/organizations/${organizationId}/payers/details`),
-
     createPersonPayer: (organizationId, payload) =>
       request("POST", `/subscriptions/organizations/${organizationId}/payers/person`, payload),
-
     createCompanyPayer: (organizationId, payload) =>
       request("POST", `/subscriptions/organizations/${organizationId}/payers/company`, payload),
-
     getPayer: (organizationId, payerId) =>
       request("GET", `/subscriptions/organizations/${organizationId}/payers/${payerId}`),
-
     updatePayer: (organizationId, payerId, payload) =>
       request("PUT", `/subscriptions/organizations/${organizationId}/payers/${payerId}`, payload),
-
     setDefaultPayer: (organizationId, payerId) =>
       request("PUT", `/subscriptions/organizations/${organizationId}/payers/${payerId}/default`),
-
     listCheckouts: (organizationId, limit = 50, offset = 0) =>
       request(
         "GET",
-        `/subscriptions/organizations/${organizationId}/checkouts?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`
+        `/subscriptions/organizations/${organizationId}/checkouts?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`,
       ),
-
     listPayments: (organizationId, limit = 50, offset = 0) =>
       request(
         "GET",
-        `/subscriptions/organizations/${organizationId}/payments?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`
+        `/subscriptions/organizations/${organizationId}/payments?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`,
       ),
-
     listDocuments: (organizationId, limit = 50, offset = 0) =>
       request(
         "GET",
-        `/subscriptions/organizations/${organizationId}/documents?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`
+        `/subscriptions/organizations/${organizationId}/documents?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`,
       ),
-
     quoteCartPayment: (organizationId, payload) =>
       request("POST", `/subscriptions/organizations/${organizationId}/payment-quotes`, payload),
-
     createCartCheckout: (organizationId, payload, idempotencyKey) =>
       request("POST", `/subscriptions/organizations/${organizationId}/cart-checkouts`, payload, {
         "Idempotency-Key": idempotencyKey,
       }),
-
     getCartCheckout: (organizationId, checkoutId) =>
       request("GET", `/subscriptions/organizations/${organizationId}/cart-checkouts/${checkoutId}`),
   };
@@ -545,14 +598,40 @@
       "/lk/user",
       {
         id: userId,
-        ...(name !== undefined ? { name } : {}),
-        ...(surname !== undefined ? { surname } : {}),
-        ...(lastName !== undefined ? { lastName } : {}),
-        ...(birthday !== undefined ? { birthday } : {}),
-        ...(mail !== undefined ? { mail } : {}),
-        ...(phoneNumber !== undefined ? { phoneNumber: apiPhone(phoneNumber) } : {}),
+        ...(name !== undefined
+          ? {
+              name,
+            }
+          : {}),
+        ...(surname !== undefined
+          ? {
+              surname,
+            }
+          : {}),
+        ...(lastName !== undefined
+          ? {
+              lastName,
+            }
+          : {}),
+        ...(birthday !== undefined
+          ? {
+              birthday,
+            }
+          : {}),
+        ...(mail !== undefined
+          ? {
+              mail,
+            }
+          : {}),
+        ...(phoneNumber !== undefined
+          ? {
+              phoneNumber: apiPhone(phoneNumber),
+            }
+          : {}),
       },
-      { "X-User-Id": userId }
+      {
+        "X-User-Id": userId,
+      },
     );
   };
 
@@ -561,12 +640,17 @@
     if (!phone) throw new Error("Введите телефон.");
     if (!newPassword) throw new Error("Введите новый пароль.");
     if (newPassword !== newPasswordConfirm) throw new Error("Пароли не совпадают.");
-
-    return request("PUT", "/auth/user/password/reset", {
-      loginNumber: phone,
-      newPassword,
-      newPasswordConfirm,
-    }, {}, false);
+    return request(
+      "PUT",
+      "/auth/user/password/reset",
+      {
+        loginNumber: phone,
+        newPassword,
+        newPasswordConfirm,
+      },
+      {},
+      false,
+    );
   };
 
   auth.confirmPasswordReset = async ({ login, code, newPassword }) => {
@@ -576,12 +660,17 @@
       throw new Error("Код из SMS должен содержать 6 цифр.");
     }
     if (!newPassword) throw new Error("Введите новый пароль.");
-
-    return request("POST", "/auth/user/password/reset/confirm", {
-      pin: code,
-      loginNumber: phone,
-      newPassword,
-    }, {}, false);
+    return request(
+      "POST",
+      "/auth/user/password/reset/confirm",
+      {
+        pin: code,
+        loginNumber: phone,
+        newPassword,
+      },
+      {},
+      false,
+    );
   };
 
   auth.changePassword = async ({ oldPassword, newPassword, newPasswordConfirm }) => {
@@ -607,17 +696,19 @@
       });
       // Backend expects multipart/form-data for this endpoint.
       // Files are intentionally not sent; the body is an empty FormData.
-      return request(
-        "POST",
-        `/tech-support/feedback?${params.toString()}`,
-        new FormData()
-      );
+      return request("POST", `/tech-support/feedback?${params.toString()}`, new FormData());
     },
   };
 
   window.__OPEN_LK_AUTH__ = auth;
+
   window.__OPEN_LK_SUBSCRIPTIONS__ = subscriptionsApi;
-  window.__OPEN_LK_PHONE__ = { normalizePhone, formatPhone };
+
+  window.__OPEN_LK_PHONE__ = {
+    normalizePhone,
+    formatPhone,
+  };
+
   window.__OPEN_LK_FEEDBACK__ = feedbackApi;
 
   const dateMs = (value, fallback) => {
@@ -674,8 +765,7 @@
     const product = item?.product || {};
     const plan = item?.plan || {};
     const priceSource = tariffPlans.find(
-      (tariff) =>
-        tariff?.product?.code === product.code && tariff?.plan?.code === plan.code
+      (tariff) => tariff?.product?.code === product.code && tariff?.plan?.code === plan.code,
     );
     return {
       id: plan.code || product.code || item.subscriptionId,
@@ -709,10 +799,9 @@
       months: active?.purchasedPeriodMonths || null,
       auto: null,
       canRenew: active?.canRenew === true,
-      remainingPercent:
-        Number.isFinite(Number(active?.remainingPercent))
-          ? Number(active.remainingPercent)
-          : null,
+      remainingPercent: Number.isFinite(Number(active?.remainingPercent))
+        ? Number(active.remainingPercent)
+        : null,
       currentPeriodStart: active?.currentPeriodStart || start || null,
       currentPeriodEnd: active?.currentPeriodEnd || until || null,
       status: statusCode || null,
@@ -729,7 +818,14 @@
   const mapOrder = (order, payerById) => {
     const payerId = order?.payerId || "";
     const snapshot = order?.payerSnapshot || null;
-    const payer = payerById[payerId] || (snapshot ? normalizePayer({ ...snapshot, id: payerId }) : null);
+    const payer =
+      payerById[payerId] ||
+      (snapshot
+        ? normalizePayer({
+            ...snapshot,
+            id: payerId,
+          })
+        : null);
     const total = Number(order?.amountKopeks || 0) / 100;
     const status = String(order?.status || "").toUpperCase();
     const item = {
@@ -746,7 +842,13 @@
       subId: order?.subscriptionId || null,
       payerId,
       corpusNumber: order?.corpusNumber || DEFAULT_CORPUS_NUMBER,
-      payer: payer || { id: payerId, type: "person", name: "", email: "", phone: "" },
+      payer: payer || {
+        id: payerId,
+        type: "person",
+        name: "",
+        email: "",
+        phone: "",
+      },
       method: null,
       created: order?.createdAt || null,
       status: status === "PAID" ? "paid" : status.toLowerCase() || "unknown",
@@ -770,22 +872,20 @@
       phone: "",
     };
     const total = Number(document?.amountKopeks || 0) / 100;
-    const status = document?.bankVerificationStatus === "BANK_UNAVAILABLE"
-      ? "unknown"
-      : "paid";
+    const status = document?.bankVerificationStatus === "BANK_UNAVAILABLE" ? "unknown" : "paid";
     const items = Array.isArray(document?.items)
       ? document.items.map((item, index) => ({
-        id: `${document?.id || "document"}-${index}`,
-        planId: document?.planCode || "",
-        product: document?.planCode || "",
-        planName: item?.name || document?.planCode || "",
-        total: Number(item?.amountKopeks || 0) / 100,
-        months: null,
-        start: document?.bankPaidAt || document?.bankCreatedAt || null,
-        end: null,
-        serviceEnd: null,
-        act: false,
-      }))
+          id: `${document?.id || "document"}-${index}`,
+          planId: document?.planCode || "",
+          product: document?.planCode || "",
+          planName: item?.name || document?.planCode || "",
+          total: Number(item?.amountKopeks || 0) / 100,
+          months: null,
+          start: document?.bankPaidAt || document?.bankCreatedAt || null,
+          end: null,
+          serviceEnd: null,
+          act: false,
+        }))
       : [];
     return {
       id: document?.id || "",
@@ -829,7 +929,6 @@
     const favorite = companies.find((item) => item?.favorite) || companies[0];
     const organizationId = favorite?.company?.id || "";
     const now = Date.now();
-
     if (!organizationId) {
       return {
         schema: 2,
@@ -857,26 +956,36 @@
         user,
         organizationId: "",
         plans: [],
-        tariffsByPeriod: { 1: [], 3: [], 12: [] },
+        tariffsByPeriod: {
+          1: [],
+          3: [],
+          12: [],
+        },
         apiErrors: {},
       };
     }
-
     const apiErrors = {};
-    const [mySubscriptionsResult, tariffResults, payerResult, checkoutResult, paymentResult, documentResult] =
-      await Promise.allSettled([
-        subscriptionsApi.getMySubscriptions(organizationId, "ALL"),
-        Promise.all([1, 3, 12].map((period) => subscriptionsApi.getTariffs(organizationId, period))),
-        subscriptionsApi.getPayerDetails(organizationId),
-        subscriptionsApi.listCheckouts(organizationId),
-        subscriptionsApi.listPayments(organizationId),
-        subscriptionsApi.listDocuments(organizationId),
-      ]);
-
+    const [
+      mySubscriptionsResult,
+      tariffResults,
+      payerResult,
+      checkoutResult,
+      paymentResult,
+      documentResult,
+    ] = await Promise.allSettled([
+      subscriptionsApi.getMySubscriptions(organizationId, "ALL"),
+      Promise.all([1, 3, 12].map((period) => subscriptionsApi.getTariffs(organizationId, period))),
+      subscriptionsApi.getPayerDetails(organizationId),
+      subscriptionsApi.listCheckouts(organizationId),
+      subscriptionsApi.listPayments(organizationId),
+      subscriptionsApi.listDocuments(organizationId),
+    ]);
     const mySubscriptions =
       mySubscriptionsResult.status === "fulfilled" && mySubscriptionsResult.value
         ? mySubscriptionsResult.value
-        : { items: [] };
+        : {
+            items: [],
+          };
     if (mySubscriptionsResult.status === "rejected") {
       apiErrors.mySubscriptions = {
         message: mySubscriptionsResult.reason?.message || "Не удалось загрузить подписки.",
@@ -884,8 +993,11 @@
         traceId: mySubscriptionsResult.reason?.traceId || "",
       };
     }
-
-    const tariffByPeriod = { 1: [], 3: [], 12: [] };
+    const tariffByPeriod = {
+      1: [],
+      3: [],
+      12: [],
+    };
     if (tariffResults.status === "fulfilled") {
       [1, 3, 12].forEach((period, index) => {
         tariffByPeriod[period] = tariffResults.value[index] || {};
@@ -897,7 +1009,6 @@
         traceId: tariffResults.reason?.traceId || "",
       };
     }
-
     const payerDetails =
       payerResult.status === "fulfilled" && Array.isArray(payerResult.value)
         ? payerResult.value.map(normalizePayer)
@@ -909,7 +1020,6 @@
         traceId: payerResult.reason?.traceId || "",
       };
     }
-
     const checkoutOrders =
       checkoutResult.status === "fulfilled" && Array.isArray(checkoutResult.value)
         ? checkoutResult.value
@@ -943,10 +1053,9 @@
         traceId: documentResult.reason?.traceId || "",
       };
     }
-
     const tariffResponses = [1, 3, 12].map((period) => tariffByPeriod[period]);
     const allAvailableTariffs = tariffResponses.flatMap((response) =>
-      Array.isArray(response?.availableTariffs) ? response.availableTariffs : []
+      Array.isArray(response?.availableTariffs) ? response.availableTariffs : [],
     );
     const periodPlans = {};
     [1, 3, 12].forEach((period) => {
@@ -954,17 +1063,17 @@
         ? tariffByPeriod[period].availableTariffs.map(mapTariffToPlan)
         : [];
     });
-
     const myItems = Array.isArray(mySubscriptions.items) ? mySubscriptions.items : [];
     const activeTariffs = Array.isArray(tariffByPeriod[1]?.activeTariffs)
       ? tariffByPeriod[1].activeTariffs
       : [];
     const subs = myItems.map((item) => mapSubscriptionCard(item, activeTariffs, payerDetails, now));
-
     const payerById = Object.fromEntries(payerDetails.map((payer) => [payer.id, payer]));
     const mappedDocuments = documents.map((document) => mapDocument(document, payerById));
     const orders = checkoutOrders.map((order) => mapOrder(order, payerById));
-    const paidPaymentsByCheckout = new Map(payments.map((payment) => [payment.checkoutId, payment]));
+    const paidPaymentsByCheckout = new Map(
+      payments.map((payment) => [payment.checkoutId, payment]),
+    );
     orders.forEach((order) => {
       const payment = paidPaymentsByCheckout.get(order.id);
       if (payment) {
@@ -979,20 +1088,17 @@
         order.total = order.items[0].total;
       }
     });
-
     const activePlanMap = new Map();
     myItems.forEach((item) => {
       const tariffPlanSource = allAvailableTariffs.find(
         (tariff) =>
-          tariff?.product?.code === item?.product?.code && tariff?.plan?.code === item?.plan?.code
+          tariff?.product?.code === item?.product?.code && tariff?.plan?.code === item?.plan?.code,
       );
       const plan = mapActivePlan(item, tariffPlanSource ? [tariffPlanSource] : []);
       activePlanMap.set(plan.id, plan);
     });
-
     const allPlans = [...activePlanMap.values(), ...Object.values(periodPlans).flat()];
     const uniquePlans = Array.from(new Map(allPlans.map((plan) => [plan.id, plan])).values());
-
     const profile = {
       first: user.name || "",
       last: user.surname || "",
@@ -1004,7 +1110,6 @@
       news: true,
       twoFactor: false,
     };
-
     return {
       schema: 2,
       clock: now,
@@ -1042,7 +1147,14 @@
       : `${new URL(API_BASE).origin}${String(url).startsWith("/") ? url : `/${url}`}`;
     const token = getToken();
     const response = await fetch(absoluteUrl, {
-      headers: token ? { Authorization: `Bearer ${token}`, accept: "application/pdf" } : { accept: "application/pdf" },
+      headers: token
+        ? {
+            Authorization: `Bearer ${token}`,
+            accept: "application/pdf",
+          }
+        : {
+            accept: "application/pdf",
+          },
     });
     if (!response.ok) throw new Error(`Не удалось открыть документ (${response.status}).`);
     const blob = await response.blob();
@@ -1058,6 +1170,9 @@
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
   };
 
+  // The public Tilda contact popup lives in the global header record.
+  // On LK pages the visual header is hidden. The cookie banner is always
+  // hidden in LK and is deliberately not wired into the LK app state.
 
   // The public Tilda contact popup lives in the global header record.
   // On LK pages the visual header is hidden. The cookie banner is always
@@ -1085,15 +1200,12 @@
 
   function openPublicContactPopup(tariffName) {
     installLkHeaderBridge();
-
     const tariff = String(tariffName || "").trim();
     const startedAt = Date.now();
     const timeoutMs = 8000;
-
     const tryOpen = () => {
-      const popup = document.querySelector("#mc-popup[data-popup=\"contact\"]");
+      const popup = document.querySelector('#mc-popup[data-popup="contact"]');
       const api = window.MetaContactPopup;
-
       if (popup && api && typeof api.open === "function") {
         const trigger = document.createElement("button");
         trigger.type = "button";
@@ -1106,7 +1218,6 @@
         trigger.style.cssText =
           "position:fixed;left:-10000px;top:-10000px;width:1px;height:1px;opacity:0;pointer-events:none;";
         document.body.appendChild(trigger);
-
         try {
           api.open(trigger);
         } finally {
@@ -1114,15 +1225,12 @@
         }
         return true;
       }
-
       if (Date.now() - startedAt < timeoutMs) {
         window.setTimeout(tryOpen, 100);
         return false;
       }
-
       return false;
     };
-
     return tryOpen();
   }
 
@@ -1147,16 +1255,56 @@
     type: payer?.type === "company" ? "COMPANY" : "PERSON",
     name: String(payer?.name || "").trim(),
     email: String(payer?.email || "").trim(),
-    ...(payer?.phone ? { phone: apiPhone(payer.phone) } : {}),
-    ...(payer?.inn ? { inn: String(payer.inn).trim() } : {}),
-    ...(payer?.kpp ? { kpp: String(payer.kpp).trim() } : {}),
-    ...(payer?.ogrn ? { ogrn: String(payer.ogrn).trim() } : {}),
-    ...(payer?.contact ? { contact: String(payer.contact).trim() } : {}),
-    ...(payer?.address ? { legalAddress: String(payer.address).trim() } : {}),
-    ...(payer?.account ? { account: String(payer.account).trim() } : {}),
-    ...(payer?.bik ? { bik: String(payer.bik).trim() } : {}),
-    ...(payer?.bank ? { bank: String(payer.bank).trim() } : {}),
-    ...(payer?.correspondent ? { correspondentAccount: String(payer.correspondent).trim() } : {}),
+    ...(payer?.phone
+      ? {
+          phone: apiPhone(payer.phone),
+        }
+      : {}),
+    ...(payer?.inn
+      ? {
+          inn: String(payer.inn).trim(),
+        }
+      : {}),
+    ...(payer?.kpp
+      ? {
+          kpp: String(payer.kpp).trim(),
+        }
+      : {}),
+    ...(payer?.ogrn
+      ? {
+          ogrn: String(payer.ogrn).trim(),
+        }
+      : {}),
+    ...(payer?.contact
+      ? {
+          contact: String(payer.contact).trim(),
+        }
+      : {}),
+    ...(payer?.address
+      ? {
+          legalAddress: String(payer.address).trim(),
+        }
+      : {}),
+    ...(payer?.account
+      ? {
+          account: String(payer.account).trim(),
+        }
+      : {}),
+    ...(payer?.bik
+      ? {
+          bik: String(payer.bik).trim(),
+        }
+      : {}),
+    ...(payer?.bank
+      ? {
+          bank: String(payer.bank).trim(),
+        }
+      : {}),
+    ...(payer?.correspondent
+      ? {
+          correspondentAccount: String(payer.correspondent).trim(),
+        }
+      : {}),
   });
 
   const saveRealPayer = async (payer) => {
@@ -1173,7 +1321,19 @@
       const { type, ...companyPayload } = payload;
       response = await subscriptionsApi.createCompanyPayer(state.organizationId, companyPayload);
     } else {
-      const { type, inn, kpp, ogrn, contact, legalAddress, account, bik, bank, correspondentAccount, ...personPayload } = payload;
+      const {
+        type,
+        inn,
+        kpp,
+        ogrn,
+        contact,
+        legalAddress,
+        account,
+        bik,
+        bank,
+        correspondentAccount,
+        ...personPayload
+      } = payload;
       response = await subscriptionsApi.createPersonPayer(state.organizationId, personPayload);
     }
     return normalizePayer(response);
@@ -1191,35 +1351,43 @@
     if (!organizationId) throw new Error("Не определена организация для оформления покупки.");
     if (!payerId) throw new Error("Не выбран плательщик.");
     if (!Array.isArray(items) || !items.length) throw new Error("Не выбраны тарифы.");
-
     const tariffIds = items.map((item) => item.tariffId || item.planId).filter(Boolean);
     if (!tariffIds.length) throw new Error("Не удалось определить выбранные тарифы.");
-
     const quote = await subscriptionsApi.quoteCartPayment(organizationId, {
       tariffIds,
       payerId,
       corpusNumber: DEFAULT_CORPUS_NUMBER,
     });
     if (!quote?.quoteId) throw new Error("API не вернул quoteId расчёта.");
-
     const checkout = await subscriptionsApi.createCartCheckout(
       organizationId,
-      { quoteId: quote.quoteId },
-      crypto.randomUUID()
+      {
+        quoteId: quote.quoteId,
+      },
+      crypto.randomUUID(),
     );
     if (!checkout?.id) throw new Error("API не вернул id оформления.");
-    return { quote, checkout };
+    return {
+      quote,
+      checkout,
+    };
   };
 
   const realActions = {
     async refresh() {
       const realState = await refreshRealState();
-      window.dispatchEvent(new CustomEvent("open-lk-real-state-updated", { detail: realState }));
+      window.dispatchEvent(
+        new CustomEvent("open-lk-real-state-updated", {
+          detail: realState,
+        }),
+      );
       return realState;
     },
     async updateProfile(profile) {
       const user = window.__OPEN_LK_REAL_STATE__?.user || {};
-      const payload = { id: user.id };
+      const payload = {
+        id: user.id,
+      };
       const first = String(profile?.first || "").trim();
       const last = String(profile?.last || "").trim();
       const email = String(profile?.email || "").trim();
@@ -1230,11 +1398,19 @@
       if (phone) payload.phoneNumber = apiPhone(phone);
       const updated = await auth.updateUser(payload);
       const realState = await refreshRealState();
-      window.dispatchEvent(new CustomEvent("open-lk-real-state-updated", { detail: realState }));
+      window.dispatchEvent(
+        new CustomEvent("open-lk-real-state-updated", {
+          detail: realState,
+        }),
+      );
       return updated;
     },
     changePassword: ({ oldPassword, newPassword, newPasswordConfirm }) =>
-      auth.changePassword({ oldPassword, newPassword, newPasswordConfirm }),
+      auth.changePassword({
+        oldPassword,
+        newPassword,
+        newPasswordConfirm,
+      }),
     sendFeedback: (message) => feedbackApi.send(message),
     getSubscription: (subscriptionId) => {
       const state = window.__OPEN_LK_REAL_STATE__;
@@ -1245,7 +1421,11 @@
       const state = window.__OPEN_LK_REAL_STATE__;
       if (!state?.organizationId) throw new Error("Не определена организация.");
       if (!state?.user?.id) throw new Error("Не определён пользователь.");
-      const response = await subscriptionsApi.cancel(state.organizationId, subscriptionId, state.user.id);
+      const response = await subscriptionsApi.cancel(
+        state.organizationId,
+        subscriptionId,
+        state.user.id,
+      );
       await this.refresh();
       return response;
     },
@@ -1285,9 +1465,18 @@
       // Совместимость для старых UI-вызовов. Новая реальная покупка должна идти через корзину.
       const state = window.__OPEN_LK_REAL_STATE__;
       if (!state?.organizationId) throw new Error("Не определена организация.");
-      const payer = state.payers.find((item) => item.id === payerUserId) || state.payers.find((item) => item.default);
+      const payer =
+        state.payers.find((item) => item.id === payerUserId) ||
+        state.payers.find((item) => item.default);
       if (!payer) throw new Error("Не выбран плательщик.");
-      return createRealCartCheckout({ items: [{ planId: planCode }], payerId: payer.id });
+      return createRealCartCheckout({
+        items: [
+          {
+            planId: planCode,
+          },
+        ],
+        payerId: payer.id,
+      });
     },
   };
 
@@ -1301,7 +1490,9 @@
     node.setAttribute("role", "status");
     node.textContent = message;
     document.body.appendChild(node);
-    window.setTimeout(() => { if (node.isConnected) node.remove(); }, 5000);
+    window.setTimeout(() => {
+      if (node.isConnected) node.remove();
+    }, 5000);
   };
 
   const readTariffIntent = () => {
@@ -1314,30 +1505,41 @@
   };
 
   const clearTariffIntent = () => {
-    try { sessionStorage.removeItem(TARIFF_INTENT_KEY); } catch { }
+    try {
+      sessionStorage.removeItem(TARIFF_INTENT_KEY);
+    } catch {}
   };
 
   const captureTariffIntentFromLoginUrl = () => {
     if (!isLoginPage()) return;
     let tariffCode = "";
-    try { tariffCode = new URLSearchParams(window.location.search).get("tariff")?.trim() || ""; } catch { }
+    try {
+      tariffCode = new URLSearchParams(window.location.search).get("tariff")?.trim() || "";
+    } catch {}
     if (!tariffCode) return;
 
     // Do not retain unknown values: they cannot become valid after authentication.
     if (!SUPPORTED_TARIFF_CODES.has(tariffCode)) {
-      try { sessionStorage.setItem(PENDING_TOAST_KEY, "Выбранный тариф недоступен."); } catch { }
+      try {
+        sessionStorage.setItem(PENDING_TOAST_KEY, "Выбранный тариф недоступен.");
+      } catch {}
       const url = new URL(window.location.href);
       url.searchParams.delete("tariff");
       window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
       return;
     }
-
     try {
-      sessionStorage.setItem(TARIFF_INTENT_KEY, JSON.stringify({ tariffCode, periodMonths: 1 }));
+      sessionStorage.setItem(
+        TARIFF_INTENT_KEY,
+        JSON.stringify({
+          tariffCode,
+          periodMonths: 1,
+        }),
+      );
       // The login UI always first navigates to /subscriptions. This one-shot marker
       // moves that transition to the tariffs page after authentication.
       sessionStorage.setItem(POST_AUTH_ROUTE_KEY, "/tariffs");
-    } catch { }
+    } catch {}
 
     // The intent is now in session storage, so the address can safely be shared
     // neither with a later internal route nor reprocessed on React remount.
@@ -1350,16 +1552,23 @@
     const intent = readTariffIntent();
     if (!intent) return;
     if (!realState?.organizationId) {
-      showPurchaseIntentMessage("Не удалось определить организацию. Выбранный тариф сохранён, попробуйте обновить страницу.");
+      showPurchaseIntentMessage(
+        "Не удалось определить организацию. Выбранный тариф сохранён, попробуйте обновить страницу.",
+      );
       return;
     }
     if (realState?.apiErrors?.tariffs) {
-      showPurchaseIntentMessage("Не удалось загрузить тарифы. Выбранный тариф сохранён, попробуйте обновить страницу.");
+      showPurchaseIntentMessage(
+        "Не удалось загрузить тарифы. Выбранный тариф сохранён, попробуйте обновить страницу.",
+      );
       return;
     }
-
-    const tariffs = Array.isArray(realState?.tariffsByPeriod?.[1]) ? realState.tariffsByPeriod[1] : [];
-    const tariffIndex = tariffs.findIndex((tariff) => tariff?.code === intent.tariffCode || tariff?.tariffCode === intent.tariffCode);
+    const tariffs = Array.isArray(realState?.tariffsByPeriod?.[1])
+      ? realState.tariffsByPeriod[1]
+      : [];
+    const tariffIndex = tariffs.findIndex(
+      (tariff) => tariff?.code === intent.tariffCode || tariff?.tariffCode === intent.tariffCode,
+    );
     if (tariffIndex < 0) {
       clearTariffIntent();
       showPurchaseIntentMessage("Выбранный тариф отсутствует в актуальном списке тарифов.");
@@ -1384,16 +1593,20 @@
       showPurchaseIntentMessage("Тариф добавлен в корзину.");
       return true;
     };
-
     if (addToExistingCart()) return;
     const observer = new MutationObserver(() => {
       if (addToExistingCart()) observer.disconnect();
     });
-    observer.observe(document.documentElement, { childList: true, subtree: true });
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
     window.setTimeout(() => {
       observer.disconnect();
       if (readTariffIntent()) {
-        showPurchaseIntentMessage("Не удалось открыть корзину. Выбранный тариф сохранён, попробуйте обновить страницу.");
+        showPurchaseIntentMessage(
+          "Не удалось открыть корзину. Выбранный тариф сохранён, попробуйте обновить страницу.",
+        );
       }
     }, 5000);
   };
@@ -1426,10 +1639,11 @@
   window.__OPEN_LK_LOGOUT__ = logout;
 
   // Подключает перехват форм кабинета и регистрацию юрлица.
+
+  // Подключает перехват форм кабинета и регистрацию юрлица.
   const installUiGuards = () => {
     if (window.__OPEN_LK_UI_GUARDS__) return;
     window.__OPEN_LK_UI_GUARDS__ = true;
-
     const isRealMode = () => Boolean(window.__OPEN_LK_REAL_MODE__);
     const toast = (message) => {
       let node = document.querySelector(".open-lk-guard-toast");
@@ -1443,104 +1657,113 @@
       window.clearTimeout(window.__OPEN_LK_GUARD_TOAST_TIMER__);
       window.__OPEN_LK_GUARD_TOAST_TIMER__ = window.setTimeout(() => node.remove(), 4500);
     };
-
-    document.addEventListener("click", (event) => {
-      const target = event.target instanceof Element ? event.target.closest("button") : null;
-      if (!target) return;
-      const text = String(target.textContent || "").trim();
-      if (text === "Выйти") {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        logout();
-      }
-    }, true);
-
-    document.addEventListener("submit", async (event) => {
-      if (!isRealMode()) return;
-      const form = event.target;
-      if (!(form instanceof HTMLFormElement)) return;
-
-      const bodyField = form.querySelector('textarea[name="body"]');
-      const subjectField = form.querySelector('input[name="subject"]');
-      if (bodyField && subjectField && window.__OPEN_LK_REAL_ACTIONS__?.sendFeedback) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        const consentField = form.querySelector('input[name="personalDataConsent"]');
-        if (consentField && !consentField.checked) {
-          toast("Подтвердите согласие на обработку персональных данных.");
+    document.addEventListener(
+      "click",
+      (event) => {
+        const target = event.target instanceof Element ? event.target.closest("button") : null;
+        if (!target) return;
+        const text = String(target.textContent || "").trim();
+        if (text === "Выйти") {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          logout();
+        }
+      },
+      true,
+    );
+    document.addEventListener(
+      "submit",
+      async (event) => {
+        if (!isRealMode()) return;
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement)) return;
+        const bodyField = form.querySelector('textarea[name="body"]');
+        const subjectField = form.querySelector('input[name="subject"]');
+        if (bodyField && subjectField && window.__OPEN_LK_REAL_ACTIONS__?.sendFeedback) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          const consentField = form.querySelector('input[name="personalDataConsent"]');
+          if (consentField && !consentField.checked) {
+            toast("Подтвердите согласие на обработку персональных данных.");
+            return;
+          }
+          const subject = String(subjectField.value || "").trim();
+          const body = String(bodyField.value || "").trim();
+          const message = subject ? `${subject}\n\n${body}` : body;
+          try {
+            await window.__OPEN_LK_REAL_ACTIONS__.sendFeedback(message);
+            form.reset();
+            toast("Принято в работу! Спасибо, что улучшаете продукт вместе с нами!");
+            window.setTimeout(() => window.location.reload(), 500);
+          } catch (error) {
+            toast(error?.message || "Не удалось отправить обращение");
+          }
           return;
         }
-        const subject = String(subjectField.value || "").trim();
-        const body = String(bodyField.value || "").trim();
-        const message = subject ? `${subject}\n\n${body}` : body;
-        try {
-          await window.__OPEN_LK_REAL_ACTIONS__.sendFeedback(message);
-          form.reset();
-          toast("Принято в работу! Спасибо, что улучшаете продукт вместе с нами!");
-          window.setTimeout(() => window.location.reload(), 500);
-        } catch (error) {
-          toast(error?.message || "Не удалось отправить обращение");
-        }
-        return;
-      }
-
-      const passwordField = form.querySelector('input[name="password"]');
-      const confirmField = form.querySelector('input[name="confirm"]');
-      if (passwordField && confirmField && window.__OPEN_LK_REAL_ACTIONS__?.changePassword) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        const oldField = form.querySelector('input[name="oldPassword"]');
-        if (!oldField || !oldField.value) {
-          toast("Введите текущий пароль.");
+        const passwordField = form.querySelector('input[name="password"]');
+        const confirmField = form.querySelector('input[name="confirm"]');
+        if (passwordField && confirmField && window.__OPEN_LK_REAL_ACTIONS__?.changePassword) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          const oldField = form.querySelector('input[name="oldPassword"]');
+          if (!oldField || !oldField.value) {
+            toast("Введите текущий пароль.");
+            return;
+          }
+          if (passwordField.value !== confirmField.value) {
+            toast("Пароли не совпадают.");
+            return;
+          }
+          try {
+            await window.__OPEN_LK_REAL_ACTIONS__.changePassword({
+              oldPassword: oldField.value,
+              newPassword: passwordField.value,
+              newPasswordConfirm: confirmField.value,
+            });
+            form.reset();
+            toast("Пароль успешно изменён.");
+            window.setTimeout(() => window.location.reload(), 500);
+          } catch (error) {
+            toast(error?.message || "Не удалось изменить пароль");
+          }
           return;
         }
-        if (passwordField.value !== confirmField.value) {
-          toast("Пароли не совпадают.");
-          return;
+        const settingsInputs = Array.from(form.querySelectorAll("input")).filter(
+          (input) => input.type !== "checkbox",
+        );
+        if (
+          settingsInputs.length >= 4 &&
+          form.closest(".settings-section") &&
+          window.__OPEN_LK_REAL_ACTIONS__?.updateProfile
+        ) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          try {
+            const [first, last, email, phone] = settingsInputs;
+            await window.__OPEN_LK_REAL_ACTIONS__.updateProfile({
+              first: first.value,
+              last: last.value,
+              email: email.value,
+              phone: phone.value,
+            });
+            toast("Настройки сохранены");
+            window.setTimeout(() => window.location.reload(), 500);
+          } catch (error) {
+            toast(error?.message || "Не удалось сохранить настройки");
+          }
         }
-        try {
-          await window.__OPEN_LK_REAL_ACTIONS__.changePassword({
-            oldPassword: oldField.value,
-            newPassword: passwordField.value,
-            newPasswordConfirm: confirmField.value,
-          });
-          form.reset();
-          toast("Пароль успешно изменён.");
-          window.setTimeout(() => window.location.reload(), 500);
-        } catch (error) {
-          toast(error?.message || "Не удалось изменить пароль");
-        }
-        return;
-      }
-
-      const settingsInputs = Array.from(form.querySelectorAll('input')).filter((input) => input.type !== "checkbox");
-      if (settingsInputs.length >= 4 && form.closest(".settings-section") && window.__OPEN_LK_REAL_ACTIONS__?.updateProfile) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        try {
-          const [first, last, email, phone] = settingsInputs;
-          await window.__OPEN_LK_REAL_ACTIONS__.updateProfile({
-            first: first.value,
-            last: last.value,
-            email: email.value,
-            phone: phone.value,
-          });
-          toast("Настройки сохранены");
-          window.setTimeout(() => window.location.reload(), 500);
-        } catch (error) {
-          toast(error?.message || "Не удалось сохранить настройки");
-        }
-      }
-    }, true);
-
+      },
+      true,
+    );
     const addPasswordField = () => {
       if (!isRealMode()) return;
-      const forms = document.querySelectorAll('form');
+      const forms = document.querySelectorAll("form");
       for (const form of forms) {
         if (!(form instanceof HTMLFormElement)) continue;
         const passwordField = form.querySelector('input[name="password"]');
         const confirmField = form.querySelector('input[name="confirm"]');
-        if (!passwordField || !confirmField || form.querySelector('input[name="oldPassword"]')) continue;
+        if (!passwordField || !confirmField || form.querySelector('input[name="oldPassword"]'))
+          continue;
         const label = document.createElement("label");
         label.className = "field";
         const span = document.createElement("span");
@@ -1553,18 +1776,27 @@
         form.insertBefore(label, passwordField.closest("label") || passwordField);
       }
     };
-
-    new MutationObserver(addPasswordField).observe(document.documentElement, { childList: true, subtree: true });
+    new MutationObserver(addPasswordField).observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
     window.addEventListener("open-lk-real-data", addPasswordField);
     installLegalEntityRegistration();
   };
 
   const LEGAL_ENTITY_SUBTITLE = "Заполните реквизиты организации для регистрации.";
+
   const PERSON_REGISTRATION_SUBTITLE = "Реквизиты организации можно заполнить после регистрации.";
+
   const legalEntityFormValues = {};
+
   let userCategoriesCache = null;
+
   let userCategoriesRequest = null;
+
   let legalEntitySyncFrame = 0;
+
+  // Загружает каталог категорий для необязательного поля регистрации юрлица.
 
   // Загружает каталог категорий для необязательного поля регистрации юрлица.
   const loadUserCategories = () => {
@@ -1590,10 +1822,14 @@
   };
 
   // Проверяет, что на шаге регистрации выбрано юридическое лицо.
+
+  // Проверяет, что на шаге регистрации выбрано юридическое лицо.
   const isCompanyRegistrationForm = (form) => {
     const selectedRole = form.querySelector(".role-choice button.selected");
     return Boolean(selectedRole && selectedRole.textContent.trim() === "Юридическое лицо");
   };
+
+  // Читает значение поля регистрации по тексту его подписи.
 
   // Читает значение поля регистрации по тексту его подписи.
   const readLabeledInput = (form, label) => {
@@ -1610,11 +1846,15 @@
   };
 
   // Читает реквизит из блока юрлица.
+
+  // Читает реквизит из блока юрлица.
   const readLegalInput = (form, name) => {
     const input = form.querySelector(`[data-legal-field="${name}"]`);
     if (input) return String(input.value || "");
     return String(legalEntityFormValues[name] || "");
   };
+
+  // Собирает тело legalEntity из полей, которые реально есть в контракте.
 
   // Собирает тело legalEntity из полей, которые реально есть в контракте.
   const collectLegalEntityDraft = (form) => {
@@ -1631,21 +1871,32 @@
     };
     const phone = apiPhone(readLabeledInput(form, "Телефон"));
     if (/^\+?[0-9]{10,15}$/.test(phone)) legalEntity.phone = phone;
-    const contactPerson = [
-      readLabeledInput(form, "Фамилия"),
-      readLabeledInput(form, "Имя"),
-    ].map((part) => part.trim()).filter(Boolean).join(" ");
+    const contactPerson = [readLabeledInput(form, "Фамилия"), readLabeledInput(form, "Имя")]
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(" ");
     if (contactPerson) legalEntity.contactPerson = contactPerson;
     const correspondentAccount = readLegalInput(form, "correspondentAccount").trim();
     if (correspondentAccount) legalEntity.correspondentAccount = correspondentAccount;
-
     const selectedCategoryId = readLegalInput(form, "categoryId").trim();
-    const selectedCategory = (userCategoriesCache || []).find((item) => item.id === selectedCategoryId);
+    const selectedCategory = (userCategoriesCache || []).find(
+      (item) => item.id === selectedCategoryId,
+    );
     const categories = selectedCategory
-      ? [{ id: selectedCategory.id, categoryName: selectedCategory.categoryName }]
+      ? [
+          {
+            id: selectedCategory.id,
+            categoryName: selectedCategory.categoryName,
+          },
+        ]
       : [];
-    return { legalEntity, categories };
+    return {
+      legalEntity,
+      categories,
+    };
   };
+
+  // Проверяет обязательные реквизиты юрлица до отправки SMS-кода.
 
   // Проверяет обязательные реквизиты юрлица до отправки SMS-кода.
   const validateLegalEntityDraft = (draft) => {
@@ -1656,12 +1907,20 @@
       ["kpp", "КПП должен содержать 9 цифр.", (value) => /^\d{9}$/.test(value)],
       ["ogrn", "ОГРН должен содержать 13 цифр.", (value) => /^\d{13}$/.test(value)],
       ["legalAddress", "Укажите юридический адрес.", (value) => value.trim().length > 0],
-      ["settlementAccount", "Расчётный счёт должен содержать 20 цифр.", (value) => /^\d{20}$/.test(value)],
+      [
+        "settlementAccount",
+        "Расчётный счёт должен содержать 20 цифр.",
+        (value) => /^\d{20}$/.test(value),
+      ],
       ["bik", "БИК должен содержать 9 цифр.", (value) => /^\d{9}$/.test(value)],
       ["bankName", "Укажите банк.", (value) => value.trim().length > 0],
     ];
     for (const [field, message, test] of checks) {
-      if (!test(String(entity[field] || ""))) return { field, message };
+      if (!test(String(entity[field] || "")))
+        return {
+          field,
+          message,
+        };
     }
     if (entity.correspondentAccount && !/^\d{20}$/.test(entity.correspondentAccount)) {
       return {
@@ -1673,11 +1932,15 @@
   };
 
   // Сохраняет введённые реквизиты, чтобы перерисовка React их не стирала.
+
+  // Сохраняет введённые реквизиты, чтобы перерисовка React их не стирала.
   const captureLegalEntityFieldValues = (root) => {
     root.querySelectorAll("[data-legal-field]").forEach((input) => {
       legalEntityFormValues[input.dataset.legalField] = input.value;
     });
   };
+
+  // Возвращает сохранённые реквизиты в заново вставленный блок.
 
   // Возвращает сохранённые реквизиты в заново вставленный блок.
   const restoreLegalEntityFieldValues = (root) => {
@@ -1688,11 +1951,15 @@
   };
 
   // Собирает разметку реквизитов юрлица.
+
+  // Собирает разметку реквизитов юрлица.
   const renderLegalEntityInput = ({ name, label, maxLength, digits, required }) => {
     const requiredMark = required ? `<span class="required"> *</span>` : "";
     const digitsAttr = digits ? ` data-legal-digits="1" inputmode="numeric"` : "";
     return `<label class="field"><span>${label}${requiredMark}</span><input type="text" data-legal-field="${name}" maxlength="${maxLength}" autocomplete="off"${digitsAttr}></label>`;
   };
+
+  // Собирает блок реквизитов регистрации юрлица.
 
   // Собирает блок реквизитов регистрации юрлица.
   const buildLegalEntityFieldsMarkup = () => {
@@ -1702,9 +1969,27 @@
       maxLength: 255,
       required: true,
     });
-    const inn = renderLegalEntityInput({ name: "inn", label: "ИНН", maxLength: 10, digits: true, required: true });
-    const kpp = renderLegalEntityInput({ name: "kpp", label: "КПП", maxLength: 9, digits: true, required: true });
-    const ogrn = renderLegalEntityInput({ name: "ogrn", label: "ОГРН", maxLength: 13, digits: true, required: true });
+    const inn = renderLegalEntityInput({
+      name: "inn",
+      label: "ИНН",
+      maxLength: 10,
+      digits: true,
+      required: true,
+    });
+    const kpp = renderLegalEntityInput({
+      name: "kpp",
+      label: "КПП",
+      maxLength: 9,
+      digits: true,
+      required: true,
+    });
+    const ogrn = renderLegalEntityInput({
+      name: "ogrn",
+      label: "ОГРН",
+      maxLength: 13,
+      digits: true,
+      required: true,
+    });
     const legalAddress = renderLegalEntityInput({
       name: "legalAddress",
       label: "Юридический адрес",
@@ -1724,7 +2009,13 @@
       digits: true,
       required: true,
     });
-    const bik = renderLegalEntityInput({ name: "bik", label: "БИК", maxLength: 9, digits: true, required: true });
+    const bik = renderLegalEntityInput({
+      name: "bik",
+      label: "БИК",
+      maxLength: 9,
+      digits: true,
+      required: true,
+    });
     const correspondentAccount = renderLegalEntityInput({
       name: "correspondentAccount",
       label: "Корреспондентский счёт",
@@ -1746,6 +2037,8 @@ ${correspondentAccount}
   };
 
   // Заполняет список категорий ответом GET /auth/user/categories.
+
+  // Заполняет список категорий ответом GET /auth/user/categories.
   const fillLegalEntityCategorySelect = (block) => {
     const label = block.querySelector("[data-legal-category]");
     const select = block.querySelector("[data-legal-field='categoryId']");
@@ -1762,7 +2055,7 @@ ${correspondentAccount}
       return;
     }
     label.hidden = false;
-      const selectedCategoryId = String(legalEntityFormValues.categoryId || "");
+    const selectedCategoryId = String(legalEntityFormValues.categoryId || "");
     select.replaceChildren();
     const emptyOption = document.createElement("option");
     emptyOption.value = "";
@@ -1774,10 +2067,15 @@ ${correspondentAccount}
       option.textContent = category.categoryName;
       select.append(option);
     });
-    if (selectedCategoryId && userCategoriesCache.some((category) => category.id === selectedCategoryId)) {
+    if (
+      selectedCategoryId &&
+      userCategoriesCache.some((category) => category.id === selectedCategoryId)
+    ) {
       select.value = selectedCategoryId;
     }
   };
+
+  // Показывает ошибку реквизитов и отмечает неверное поле.
 
   // Показывает ошибку реквизитов и отмечает неверное поле.
   const showLegalEntityError = (form, fieldName, message) => {
@@ -1792,6 +2090,8 @@ ${correspondentAccount}
     input.setAttribute("aria-invalid", "true");
     input.focus();
   };
+
+  // Запоминает ввод в реквизитах и снимает подсветку ошибки.
 
   // Запоминает ввод в реквизитах и снимает подсветку ошибки.
   const bindLegalEntityFields = (block) => {
@@ -1818,6 +2118,8 @@ ${correspondentAccount}
   };
 
   // Вставляет блок реквизитов в форму регистрации юрлица.
+
+  // Вставляет блок реквизитов в форму регистрации юрлица.
   const ensureLegalEntityFields = (form) => {
     const current = form.querySelector("[data-open-lk-legal-entity]");
     if (current) return current;
@@ -1833,6 +2135,8 @@ ${correspondentAccount}
   };
 
   // Меняет подпись регистрации, пока выбрано юридическое лицо.
+
+  // Меняет подпись регистрации, пока выбрано юридическое лицо.
   const syncRegistrationSubtitle = (isCompany) => {
     const subtitle = document.querySelector(".auth-inner > p.muted");
     if (!subtitle) return;
@@ -1845,6 +2149,8 @@ ${correspondentAccount}
       subtitle.textContent = PERSON_REGISTRATION_SUBTITLE;
     }
   };
+
+  // Синхронизирует блок реквизитов с выбранным типом регистрации.
 
   // Синхронизирует блок реквизитов с выбранным типом регистрации.
   const syncLegalEntityRegistrationForm = () => {
@@ -1875,27 +2181,34 @@ ${correspondentAccount}
   };
 
   // Подключает форму юрлица и откладывает черновик до подтверждения телефона.
+
+  // Подключает форму юрлица и откладывает черновик до подтверждения телефона.
   const installLegalEntityRegistration = () => {
     if (window.__OPEN_LK_LEGAL_ENTITY__) return;
     window.__OPEN_LK_LEGAL_ENTITY__ = true;
-
-    document.addEventListener("submit", (event) => {
-      const form = event.target;
-      if (!(form instanceof HTMLFormElement) || !isCompanyRegistrationForm(form)) return;
-      const submitButton = form.querySelector('button[type="submit"]');
-      const submitText = String(event.submitter?.textContent || submitButton?.textContent || "").trim();
-      if (submitText !== "Зарегистрироваться") return;
-      const draft = collectLegalEntityDraft(form);
-      const validationError = validateLegalEntityDraft(draft);
-      if (validationError) {
-        pendingLegalEntityDraft = null;
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        showLegalEntityError(form, validationError.field, validationError.message);
-        return;
-      }
-      pendingLegalEntityDraft = draft;
-    }, true);
+    document.addEventListener(
+      "submit",
+      (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !isCompanyRegistrationForm(form)) return;
+        const submitButton = form.querySelector('button[type="submit"]');
+        const submitText = String(
+          event.submitter?.textContent || submitButton?.textContent || "",
+        ).trim();
+        if (submitText !== "Зарегистрироваться") return;
+        const draft = collectLegalEntityDraft(form);
+        const validationError = validateLegalEntityDraft(draft);
+        if (validationError) {
+          pendingLegalEntityDraft = null;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          showLegalEntityError(form, validationError.field, validationError.message);
+          return;
+        }
+        pendingLegalEntityDraft = draft;
+      },
+      true,
+    );
 
     // Планирует сверку блока реквизитов после перерисовки формы.
     const scheduleLegalEntitySync = () => {
@@ -1905,13 +2218,15 @@ ${correspondentAccount}
         syncLegalEntityRegistrationForm();
       });
     };
-
-    document.addEventListener("click", (event) => {
-      const target = event.target instanceof Element ? event.target : null;
-      if (!target?.closest(".role-choice button")) return;
-      scheduleLegalEntitySync();
-    }, true);
-
+    document.addEventListener(
+      "click",
+      (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target?.closest(".role-choice button")) return;
+        scheduleLegalEntitySync();
+      },
+      true,
+    );
     new MutationObserver(scheduleLegalEntitySync).observe(document.documentElement, {
       childList: true,
       subtree: true,
@@ -1926,7 +2241,7 @@ ${correspondentAccount}
     try {
       message = sessionStorage.getItem(PENDING_TOAST_KEY) || "";
       if (message) sessionStorage.removeItem(PENDING_TOAST_KEY);
-    } catch { }
+    } catch {}
     if (!message) return;
 
     // Use the same existing .toast visual class as all successful LK validations.
@@ -1936,10 +2251,13 @@ ${correspondentAccount}
       const node = document.createElement("div");
       node.className = "toast open-lk-registration-toast";
       node.setAttribute("role", "status");
-      node.innerHTML = '<span aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;font-size:18px;line-height:1">✓</span><span></span>';
+      node.innerHTML =
+        '<span aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;font-size:18px;line-height:1">✓</span><span></span>';
       node.lastElementChild.textContent = message;
       document.body.appendChild(node);
-      window.setTimeout(() => { if (node.isConnected) node.remove(); }, 4500);
+      window.setTimeout(() => {
+        if (node.isConnected) node.remove();
+      }, 4500);
     }, 0);
   };
 
@@ -1948,7 +2266,7 @@ ${correspondentAccount}
     try {
       route = sessionStorage.getItem(POST_AUTH_ROUTE_KEY) || "";
       if (route) sessionStorage.removeItem(POST_AUTH_ROUTE_KEY);
-    } catch { }
+    } catch {}
     return route;
   };
 
@@ -1960,86 +2278,84 @@ ${correspondentAccount}
     window.__OPEN_LK_REAL_MODE__ = Boolean(realState?.session && !realState?.demo);
     window.__OPEN_LK_REAL_ACTIONS__ = realActions;
     window.__OPEN_LK_REAL_STATE__ = realState?.demo && !isLoginPage() ? null : realState;
-
-    const ensureCurrentCss = () => new Promise((resolve) => {
-      const target = new URL(CSS_URL, window.location.href);
-      const head = document.head || document.documentElement;
-
-      const isTargetStylesheet = (link) => {
-        try {
-          const href = new URL(link.href, window.location.href);
-          return href.origin === target.origin && href.pathname === target.pathname;
-        } catch {
-          return false;
-        }
-      };
-
-      const removeLegacyStylesheets = () => {
-        Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
-          .filter(isTargetStylesheet)
-          .forEach((link) => link.remove());
-
-        const injected = document.getElementById("open-lk-external-css");
-        if (injected) injected.remove();
-      };
-
-      let settled = false;
-      let timer = null;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        if (timer) window.clearTimeout(timer);
-        resolve();
-      };
-
-      // Always re-read the current GitHub Pages CSS instead of accepting a stale
-      // stylesheet link that may have been left by an earlier app version.
-      const controller = typeof AbortController === "function" ? new AbortController() : null;
-      timer = window.setTimeout(() => {
-        if (controller) controller.abort();
-        finish();
-      }, CSS_LOAD_TIMEOUT_MS);
-
-      fetch(CSS_URL, {
-        method: "GET",
-        mode: "cors",
-        cache: "no-store",
-        signal: controller ? controller.signal : undefined
-      })
-        .then((response) => {
-          if (!response.ok) throw new Error(`CSS request failed: ${response.status}`);
-          return response.text();
-        })
-        .then((cssText) => {
-          if (settled) return;
-          removeLegacyStylesheets();
-          const style = document.createElement("style");
-          style.id = "open-lk-external-css";
-          style.textContent = cssText;
-          head.appendChild(style);
-          finish();
-        })
-        .catch(() => {
-          // If fetch is unavailable/blocked, keep the page usable and fall back
-          // to a normal stylesheet link rather than leaving the app waiting.
-          if (settled) return;
-          const existing = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).find(isTargetStylesheet);
-          if (!existing) {
-            const styleLink = document.createElement("link");
-            styleLink.rel = "stylesheet";
-            styleLink.href = CSS_URL;
-            head.appendChild(styleLink);
+    const ensureCurrentCss = () =>
+      new Promise((resolve) => {
+        const target = new URL(CSS_URL, window.location.href);
+        const head = document.head || document.documentElement;
+        const isTargetStylesheet = (link) => {
+          try {
+            const href = new URL(link.href, window.location.href);
+            return href.origin === target.origin && href.pathname === target.pathname;
+          } catch {
+            return false;
           }
+        };
+        const removeLegacyStylesheets = () => {
+          Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+            .filter(isTargetStylesheet)
+            .forEach((link) => link.remove());
+          const injected = document.getElementById("open-lk-external-css");
+          if (injected) injected.remove();
+        };
+        let settled = false;
+        let timer = null;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          if (timer) window.clearTimeout(timer);
+          resolve();
+        };
+
+        // Always re-read the current GitHub Pages CSS instead of accepting a stale
+        // stylesheet link that may have been left by an earlier app version.
+        const controller = typeof AbortController === "function" ? new AbortController() : null;
+        timer = window.setTimeout(() => {
+          if (controller) controller.abort();
           finish();
-        });
-    });
+        }, CSS_LOAD_TIMEOUT_MS);
+        fetch(CSS_URL, {
+          method: "GET",
+          mode: "cors",
+          cache: "no-store",
+          signal: controller ? controller.signal : undefined,
+        })
+          .then((response) => {
+            if (!response.ok) throw new Error(`CSS request failed: ${response.status}`);
+            return response.text();
+          })
+          .then((cssText) => {
+            if (settled) return;
+            removeLegacyStylesheets();
+            const style = document.createElement("style");
+            style.id = "open-lk-external-css";
+            style.textContent = cssText;
+            head.appendChild(style);
+            finish();
+          })
+          .catch(() => {
+            // If fetch is unavailable/blocked, keep the page usable and fall back
+            // to a normal stylesheet link rather than leaving the app waiting.
+            if (settled) return;
+            const existing = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).find(
+              isTargetStylesheet,
+            );
+            if (!existing) {
+              const styleLink = document.createElement("link");
+              styleLink.rel = "stylesheet";
+              styleLink.href = CSS_URL;
+              head.appendChild(styleLink);
+            }
+            finish();
+          });
+      });
 
     // Final tariff card spacing guard. This is intentionally injected after the page-local Tilda styles
     // so a stale/embedded page rule cannot override the requested final values.
     if (!document.getElementById("open-lk-final-tariff-card-style")) {
       const tariffStyle = document.createElement("style");
       tariffStyle.id = "open-lk-final-tariff-card-style";
-      tariffStyle.textContent = ".tariff-card>p{min-height:50px !important;margin:10px 0 0 !important;font-size:12px;flex:1} .basket-payer .payer-requisites-row>.payer-requisites-button{font-size:11px !important;align-self:flex-end !important;margin-left:auto !important} .basket-payer .payer-add-row>.add-payer-button{font-size:14px !important;align-self:flex-start !important;margin-left:0 !important}";
+      tariffStyle.textContent =
+        ".tariff-card>p{min-height:50px !important;margin:10px 0 0 !important;font-size:12px;flex:1} .basket-payer .payer-requisites-row>.payer-requisites-button{font-size:11px !important;align-self:flex-end !important;margin-left:auto !important} .basket-payer .payer-add-row>.add-payer-button{font-size:14px !important;align-self:flex-start !important;margin-left:0 !important}";
       document.head.appendChild(tariffStyle);
     }
     if (realState?.demo) {
@@ -2049,22 +2365,25 @@ ${correspondentAccount}
       window.__OPEN_LK_REAL_PLANS__ = realState.plans || [];
       window.__OPEN_LK_TARIFFS_BY_PERIOD__ = realState.tariffsByPeriod || {};
     }
-
     installUiGuards();
-
     ensureCurrentCss().then(() => {
       const script = document.createElement("script");
       script.src = UI_URL;
       script.async = false;
       script.onload = () => {
-        window.dispatchEvent(new CustomEvent("open-lk-real-data", { detail: realState }));
+        window.dispatchEvent(
+          new CustomEvent("open-lk-real-data", {
+            detail: realState,
+          }),
+        );
         if (typeof onReady === "function") onReady();
         consumePendingRegistrationToast();
       };
       script.onerror = () => {
         const root = document.getElementById("root");
         if (root) {
-          root.innerHTML = "<div style=\"padding:24px;font:16px sans-serif\">Не удалось загрузить интерфейс кабинета.</div>";
+          root.innerHTML =
+            '<div style="padding:24px;font:16px sans-serif">Не удалось загрузить интерфейс кабинета.</div>';
         }
         if (typeof onReady === "function") onReady();
       };
@@ -2072,13 +2391,15 @@ ${correspondentAccount}
     });
   };
 
-
   const redirectToLogin = () => {
     if (!isLoginPage()) window.location.replace("/login");
   };
 
   let initPromise = null;
+
   let initGeneration = 0;
+  // null = detect whether this is a true LK entry; false = internal LK navigation.
+
   // null = detect whether this is a true LK entry; false = internal LK navigation.
   let preloaderCurtainOverride = null;
 
@@ -2109,16 +2430,13 @@ ${correspondentAccount}
       hideEntryPreloader();
       return;
     }
-
     captureTariffIntentFromLoginUrl();
 
     // The Tilda header must stay enabled on every LK page because the
     // contact popup lives in the same global Tilda record. Only the visual
     // header mount is hidden; the popup record remains available in the DOM.
     installLkHeaderBridge();
-
     const demoMode = sessionStorage.getItem(DEMO_KEY) === "1";
-
     if (isLoginPage()) {
       // Restore an existing real session when the user returns from the public site.
       // The auth token is already persisted in localStorage; /subscriptions will
@@ -2133,28 +2451,31 @@ ${correspondentAccount}
       clearDemoMode();
       bootstrapEntryPreloader(preloaderCurtainOverride);
       preloaderCurtainOverride = null;
-      loadUi({
-        demo: false,
-        session: false,
-        profile: {},
-        payers: [],
-        cards: [],
-        subs: [],
-        orders: [],
-        tickets: [],
-        events: [],
-        schema: 2,
-        clock: Date.now(),
-      }, { onReady: hideEntryPreloaderAfterPaint });
+      loadUi(
+        {
+          demo: false,
+          session: false,
+          profile: {},
+          payers: [],
+          cards: [],
+          subs: [],
+          orders: [],
+          tickets: [],
+          events: [],
+          schema: 2,
+          clock: Date.now(),
+        },
+        {
+          onReady: hideEntryPreloaderAfterPaint,
+        },
+      );
       return;
     }
-
     if (demoMode) {
       clearDemoMode();
       redirectToLogin();
       return;
     }
-
     if (!getToken()) {
       redirectToLogin();
       return;
@@ -2170,10 +2491,8 @@ ${correspondentAccount}
         return;
       }
     }
-
     bootstrapEntryPreloader(preloaderCurtainOverride);
     preloaderCurtainOverride = null;
-
     try {
       const realState = await loadRealState();
       window.__OPEN_LK_DEMO_MODE__ = false;
@@ -2200,11 +2519,17 @@ ${correspondentAccount}
   const bootCurrentPage = () => {
     // Do not start two API/UI bootstraps for the same restored document.
     if (initPromise) return initPromise;
-    initPromise = Promise.resolve().then(init).finally(() => {
-      initPromise = null;
-    });
+    initPromise = Promise.resolve()
+      .then(init)
+      .finally(() => {
+        initPromise = null;
+      });
     return initPromise;
   };
+
+  // Tilda pages may be restored from the browser BFCache when the user presses Back/Forward.
+  // In that case DOMContentLoaded does not fire again, so the React root/loader can otherwise
+  // remain in a stale state. Re-bootstrap only for persisted restores.
 
   // Tilda pages may be restored from the browser BFCache when the user presses Back/Forward.
   // In that case DOMContentLoaded does not fire again, so the React root/loader can otherwise
@@ -2239,10 +2564,14 @@ ${correspondentAccount}
   });
 
   // Create the entry loader as early as possible, before Tilda/React can paint an empty page.
+
+  // Create the entry loader as early as possible, before Tilda/React can paint an empty page.
   bootstrapEntryPreloader();
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", bootCurrentPage, { once: true });
+    document.addEventListener("DOMContentLoaded", bootCurrentPage, {
+      once: true,
+    });
   } else {
     bootCurrentPage();
   }
