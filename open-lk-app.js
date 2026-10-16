@@ -364,6 +364,48 @@
     localStorage.setItem("authToken", token);
   };
 
+  const REFRESH_TOKEN_KEY = "refreshToken";
+
+  const METAPRORAB_APP_URL = "https://itprorab.metasymbiont.com/";
+
+  const extractRefreshToken = (data) =>
+    (typeof data === "object" &&
+      (data?.refreshToken ||
+        data?.refresh_token ||
+        data?.data?.refreshToken ||
+        data?.data?.refresh_token ||
+        data?.result?.refreshToken ||
+        data?.result?.refresh_token)) ||
+    "";
+
+  // Refresh нужен кнопке «Открыть продукт»: МетаПрораб поднимает сессию только по нему.
+  const saveRefreshToken = (data) => {
+    const refreshToken = String(extractRefreshToken(data) || "").trim();
+    if (!refreshToken) {
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+      return;
+    }
+    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+  };
+
+  const clearRefreshToken = () => {
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
+  };
+
+  // МетаПрораб сам открывает проекты, если вход пришёл как handoff без intent.
+  // Параметр from=metacad обязателен: другой источник Прораб сейчас не принимает.
+  const openMetaProrab = () => {
+    const accessToken = getToken();
+    if (!accessToken) return;
+    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY) || "";
+    const hash = new URLSearchParams();
+    hash.set("access_token", accessToken);
+    if (refreshToken) hash.set("refresh_token", refreshToken);
+    window.location.assign(`${METAPRORAB_APP_URL}?from=metacad#${hash.toString()}`);
+  };
+
+  window.__OPEN_LK_OPEN_METAPRORAB__ = openMetaProrab;
+
   const clearDemoMode = () => sessionStorage.removeItem(DEMO_KEY);
 
   const throwRegistrationValidation = (data) => {
@@ -445,6 +487,7 @@
         false,
       );
       saveToken(extractToken(data));
+      saveRefreshToken(data);
       clearDemoMode();
       return data;
     },
@@ -517,6 +560,7 @@
           );
       throwRegistrationValidation(data);
       saveToken(extractToken(data));
+      saveRefreshToken(data);
       await waitForRegistrationProfile();
       const createdUser = await request("GET", "/lk/user");
       if (!createdUser?.id) {
@@ -1665,6 +1709,7 @@
 
   const logout = () => {
     for (const key of TOKEN_KEYS) localStorage.removeItem(key);
+    clearRefreshToken();
     sessionStorage.removeItem(DEMO_KEY);
     window.__OPEN_LK_DEMO_MODE__ = false;
     window.__OPEN_LK_REAL_MODE__ = false;
@@ -2479,7 +2524,11 @@ ${correspondentAccount}
     url.hash = "";
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
 
-    if (accessToken) saveToken(accessToken);
+    if (accessToken) {
+      // Чужой refresh с этого браузера к новому access-токену не приклеиваем.
+      clearRefreshToken();
+      saveToken(accessToken);
+    }
   };
 
   const init = async () => {

@@ -65399,11 +65399,20 @@ Minimum version required to store current data is: ` +
                   state: state,
                   onCatalog: () => navigate("catalog"),
                   onManage: (G) => openDetail(G),
-                  onOpen: (G) =>
+                  onOpen: (G) => {
+                    if (
+                      globalThis.__OPEN_LK_REAL_MODE__ &&
+                      brandProductIconKey(G) === "prorab" &&
+                      typeof globalThis.__OPEN_LK_OPEN_METAPRORAB__ === "function"
+                    ) {
+                      globalThis.__OPEN_LK_OPEN_METAPRORAB__();
+                      return;
+                    }
                     setModal({
                       type: "product",
                       plan: G,
-                    }),
+                    });
+                  },
                   onBuy: selectPlan,
                 }),
               route === "subscriptions" &&
