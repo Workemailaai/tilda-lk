@@ -366,7 +366,7 @@
 
   const REFRESH_TOKEN_KEY = "refreshToken";
 
-  const METAPRORAB_APP_URL = "https://itprorab.metasymbiont.com/";
+  const METAPRORAB_APP_URL = "https://pilot.metasymbiont.com/";
 
   const extractRefreshToken = (data) =>
     (typeof data === "object" &&
