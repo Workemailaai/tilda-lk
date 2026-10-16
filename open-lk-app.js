@@ -2458,7 +2458,32 @@ ${correspondentAccount}
     entryPreloaderLeft = false;
   };
 
+  // Забирает access_token из hash до проверки сессии и кладёт его так же, как логин кладёт поле token.
+  // Hash снимается сразу, чтобы токен не остался в адресной строке.
+  const consumeAccessTokenFromHash = () => {
+    const rawHash = String(window.location.hash || "").replace(/^#/, "");
+    if (!rawHash) return;
+
+    let accessToken = "";
+    let hasAccessToken = false;
+    try {
+      const hashParams = new URLSearchParams(rawHash);
+      hasAccessToken = hashParams.has("access_token");
+      accessToken = hashParams.get("access_token")?.trim() || "";
+    } catch {
+      hasAccessToken = false;
+    }
+    if (!hasAccessToken) return;
+
+    const url = new URL(window.location.href);
+    url.hash = "";
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+
+    if (accessToken) saveToken(accessToken);
+  };
+
   const init = async () => {
+    consumeAccessTokenFromHash();
     const generation = ++initGeneration;
     const route = ensureKnownRoute();
     if (!route) {
